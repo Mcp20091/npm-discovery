@@ -108,7 +108,7 @@ function renderSettings() {
     const s = sett[k], v = esc(s.value);
     let input;
     if (t === 'bool') input = `<input type="checkbox" data-k="${k}" ${String(s.value).toLowerCase() === 'true' ? 'checked' : ''}>`;
-    else if (t === 'cert') input = `<select data-k="${k}"><option value="0">No default certificate</option>${certs.map(c => `<option value="${c.id}" ${String(c.id) === String(s.value) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
+    else if (t === 'cert') input = `<select data-k="${k}"><option value="0">No default certificate</option>${+s.value && !certs.some(c => String(c.id) === String(s.value)) ? `<option value="${esc(s.value)}" selected>Certificate ${esc(s.value)} (not found in NPM)</option>` : ''}${certs.map(c => `<option value="${c.id}" ${String(c.id) === String(s.value) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
     else if (t === 'area') input = `<textarea data-k="${k}" rows="3">${v}</textarea>`;
     else input = `<input type="${t}" data-k="${k}" value="${v}" ${k === 'NPM_PASSWORD' ? `placeholder="${s.set ? '(saved - leave blank to keep)' : 'not set'}" autocomplete="new-password"` : ''}>`;
     return `<label class="sf"><span class="sl">${label}<small> · ${s.source === 'ui' ? 'saved here' : s.source === 'config' ? 'from config.env' : 'default'}</small></span>${input}<small class="mut">${hint}</small></label>`;
@@ -252,7 +252,7 @@ function row(i) {
     <td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
 }
 
-document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); } if (tab === 'history') await loadHistory(); render(); return; }
+document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); } if (tab === 'history') await loadHistory(); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a;
   if (a === 'hshow') {
