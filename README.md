@@ -49,8 +49,8 @@ does not exist), and enables a systemd service that starts on boot. Data (SQLite
 | `SCAN_SUBNETS` | required | Comma separated CIDRs, e.g. `192.168.1.0/24,192.168.2.0/24` |
 | `SCAN_EXCLUDE` | empty | IPs/ranges to skip, e.g. `192.168.1.1,192.168.1.50-60` |
 | `BASE_DOMAIN` | required | Proxy hosts become `<subdomain>.<BASE_DOMAIN>` |
-| `SCAN_INTERVAL_HOURS` | `6` | Scheduled scan interval; `0` disables scheduling |
-| `SCAN_ON_START` | `true` | Scan shortly after service start |
+| `SCAN_INTERVAL_HOURS` | `0` | Scheduled scan interval; `0` disables scheduling |
+| `SCAN_ON_START` | `false` | Scan shortly after service start |
 | `SCAN_PORTS` | common homelab list | Ports to check |
 | `SCAN_ALL_PORTS` | `false` | Scan all 65535 ports (slow) |
 | `PROBE_TIMEOUT` | `5` | Seconds per HTTP/HTTPS probe |
