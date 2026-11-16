@@ -11,8 +11,15 @@ _conn = None
 
 def init():
     global _conn
+    if _conn is not None:
+        return
     os.makedirs(config.DATA_DIR, exist_ok=True)
-    _conn = sqlite3.connect(os.path.join(config.DATA_DIR, "discovery.db"), check_same_thread=False)
+    path = os.path.join(config.DATA_DIR, "discovery.db")
+    _conn = sqlite3.connect(path, check_same_thread=False)
+    try:
+        os.chmod(path, 0o600)  # settings include the NPM password
+    except OSError:
+        pass
     _conn.row_factory = sqlite3.Row
     with _lock:
         _conn.executescript("""
@@ -24,6 +31,10 @@ def init():
             dismissed INTEGER NOT NULL DEFAULT 0,
             missing INTEGER NOT NULL DEFAULT 0,
             UNIQUE(ip, port));
+        CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS exclusions(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            value TEXT NOT NULL UNIQUE, added REAL);
         CREATE TABLE IF NOT EXISTS scans(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             started REAL, finished REAL, status TEXT, error TEXT, found INTEGER DEFAULT 0);

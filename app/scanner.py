@@ -18,8 +18,9 @@ state = {"running": False}
 async def run_nmap():
     args = ["nmap", "-sT", "-Pn", "-n", "--open", "-T4", "--max-retries", "1", "-oX", "-"]
     args += ["-p-"] if config.SCAN_ALL_PORTS else ["-p", ",".join(map(str, config.SCAN_PORTS))]
-    if config.SCAN_EXCLUDE:
-        args += ["--exclude", ",".join(config.SCAN_EXCLUDE)]
+    excl = config.SCAN_EXCLUDE + [r["value"] for r in db.q("SELECT value FROM exclusions")]
+    if excl:
+        args += ["--exclude", ",".join(excl)]
     args += config.SCAN_SUBNETS
     try:
         proc = await asyncio.create_subprocess_exec(

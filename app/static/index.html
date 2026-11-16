@@ -35,6 +35,16 @@ td.mut{color:var(--mut);font-size:12px}
 .err{color:var(--bad);font-size:12px}
 .empty{padding:30px;text-align:center;color:var(--mut)}
 code{font-size:12px}
+.sett{max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px 18px}
+.sett h3{margin:18px 0 6px;font-size:14px}
+.sf{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.sl{font-weight:600}.sl small{font-weight:400;color:var(--mut)}
+.sett input[type=text],.sett input[type=password],.sett input[type=number],.sett textarea{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;width:100%}
+.sett input[type=checkbox]{align-self:flex-start}
+.sett .line{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.ok{color:var(--ok)}
+small.mut{color:var(--mut)}
+.sett #smsg{min-height:1.4em}
 </style>
 </head>
 <body>
@@ -53,7 +63,53 @@ code{font-size:12px}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let tab = 'new', data = {items: [], npm_error: null}, certs = [], status = {}, rowErr = {};
-const TABS = [['new','New'],['proxied','Already proxied'],['dismissed','Dismissed']];
+const TABS = [['new','New'],['proxied','Already proxied'],['dismissed','Dismissed'],['exclusions','Exclusions'],['settings','Settings']];
+let sett = null, sdirty = false, smsg = {text: '', bad: false};
+async function loadSettings() { try { sett = (await api('/api/settings')).settings; } catch (e) { smsg = {text: e.message, bad: true}; } }
+const FIELDS = [
+  ['Nginx Proxy Manager', [
+    ['NPM_URL', 'text', 'NPM URL', 'e.g. http://192.168.1.10:81'],
+    ['NPM_EMAIL', 'text', 'Login email', 'Use an NPM user without 2FA'],
+    ['NPM_PASSWORD', 'password', 'Password', ''],
+    ['NPM_VERIFY_TLS', 'bool', 'Verify NPM TLS certificate', 'Turn off for an https URL with a self-signed certificate']]],
+  ['Discovery', [
+    ['SCAN_SUBNETS', 'area', 'Subnets to scan', 'One per line or comma separated, e.g. 192.168.1.0/24'],
+    ['BASE_DOMAIN', 'text', 'Base domain', 'Proxy hosts become subdomain.thisdomain, e.g. jellyfin.mydomain.com'],
+    ['SCAN_INTERVAL_HOURS', 'number', 'Scan every (hours)', '0 = only when you click Scan now'],
+    ['SCAN_ON_START', 'bool', 'Scan when the service starts', ''],
+    ['SCAN_PORTS', 'area', 'Ports to check', 'Comma separated'],
+    ['SCAN_ALL_PORTS', 'bool', 'Scan all 65535 ports', 'Much slower and more likely to trigger security software'],
+    ['PROBE_TIMEOUT', 'number', 'Probe timeout (seconds)', '']]],
+  ['Web page', [
+    ['WEB_HOST', 'text', 'Listen address', 'Needs a service restart'],
+    ['WEB_PORT', 'number', 'Listen port', 'Needs a service restart']]]];
+function renderSettings() {
+  if (!sett) { $('#content').innerHTML = '<div class="empty">Loading…</div>'; return; }
+  const field = ([k, t, label, hint]) => {
+    const s = sett[k], v = esc(s.value);
+    let input;
+    if (t === 'bool') input = `<input type="checkbox" data-k="${k}" ${String(s.value).toLowerCase() === 'true' ? 'checked' : ''}>`;
+    else if (t === 'area') input = `<textarea data-k="${k}" rows="3">${v}</textarea>`;
+    else input = `<input type="${t}" data-k="${k}" value="${v}" ${k === 'NPM_PASSWORD' ? `placeholder="${s.set ? '(saved - leave blank to keep)' : 'not set'}" autocomplete="new-password"` : ''}>`;
+    return `<label class="sf"><span class="sl">${label}<small> · ${s.source === 'ui' ? 'saved here' : s.source === 'config' ? 'from config.env' : 'default'}</small></span>${input}<small class="mut">${hint}</small></label>`;
+  };
+  $('#content').innerHTML = `<div class="sett">` + FIELDS.map(([g, fs]) => `<h3>${g}</h3>${fs.map(field).join('')}`).join('') +
+    `<div class="line"><button class="primary" data-a="ssave">Save</button><button data-a="stest">Test NPM connection</button></div>
+     <div class="${smsg.bad ? 'err' : 'ok'}" id="smsg">${esc(smsg.text)}</div>
+     <h3>Maintenance</h3><div class="line"><button data-a="sreset">Reset all to config.env</button><button data-a="srestart">Restart service</button></div>
+     <small class="mut">Settings saved here override config.env. Skipped addresses are on the Exclusions tab.</small></div>`;
+}
+document.addEventListener('input', e => { if (e.target.closest('.sett')) sdirty = true; });
+let excl = {items: [], from_config: []}, exclErr = '';
+async function loadExcl() { try { excl = await api('/api/exclusions'); } catch {} }
+function renderExcl() {
+  const rows = excl.from_config.map(v => `<tr><td>${esc(v)}</td><td class="mut">from config.env</td><td></td></tr>`).concat(
+    excl.items.map(x => `<tr><td>${esc(x.value)}</td><td class="mut">added here</td><td><button data-a="rmexcl" data-id="${x.id}">Remove</button></td></tr>`));
+  $('#content').innerHTML = `<div class="banner info">These addresses are skipped by every scan. Use it for your router, PC or anything that objects to port scans. Takes effect on the next scan.</div>
+    <div class="act" style="flex-direction:row;margin-bottom:12px"><input type="text" id="exv" placeholder="192.168.1.5   192.168.1.50-60   192.168.1.128/28" style="max-width:380px">
+    <button class="primary" data-a="addexcl">Add</button></div><div class="err" style="margin-bottom:8px">${esc(exclErr)}</div>` +
+    (rows.length ? `<table><thead><tr><th>Skipped address</th><th>Source</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">No exclusions.</div>');
+}
 
 const fmt = t => t ? new Date(t*1000).toLocaleString() : '-';
 async function api(path, opts) {
@@ -90,8 +146,10 @@ async function loadCerts() {
 }
 
 function render() {
-  const count = k => data.items.filter(i => i.state === k).length;
-  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}">${n} (${count(k)})</div>`).join('');
+  const count = k => k === 'exclusions' ? excl.items.length + excl.from_config.length : data.items.filter(i => i.state === k).length;
+  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}">${n}${k === 'settings' ? '' : ` (${count(k)})`}</div>`).join('');
+  if (tab === 'settings') { if (!sdirty) renderSettings(); return; }
+  if (tab === 'exclusions') { renderExcl(); return; }
   const items = data.items.filter(i => i.state === tab);
   if (!items.length) { $('#content').innerHTML = `<div class="empty">Nothing here.</div>`; return; }
   const extra = tab === 'proxied' ? '<th>Proxy host</th>' : '<th>Action</th>';
@@ -112,18 +170,50 @@ function row(i) {
         <label><input type="checkbox" class="ws" checked> Websockets</label></div>
       <div class="line"><select class="cert">${opts}</select></div>
       <div class="line"><button class="primary" data-a="add" data-id="${i.id}">Add</button>
-        <button data-a="dismiss" data-id="${i.id}">Dismiss</button></div>
+        <button data-a="dismiss" data-id="${i.id}">Dismiss</button>
+        <button data-a="exclude" data-ip="${esc(i.ip)}" data-id="${i.id}" title="Never scan this IP again">Exclude host</button></div>
       <div class="err">${esc(rowErr[i.id] || '')}</div></div>`;
   }
   return `<tr><td><b>${esc(i.ip)}</b>:${i.port}${gone}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
     <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td><td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
 }
 
-document.addEventListener('click', async e => {
-  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; render(); return; }
+document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); } render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a;
+  if (a.startsWith('s')) {
+    const msg = (text, bad) => { smsg = {text, bad: !!bad}; const m = $('#smsg'); if (m) { m.className = bad ? 'err' : 'ok'; m.textContent = text; } };
+    try {
+      if (a === 'ssave') {
+        const values = {};
+        document.querySelectorAll('.sett [data-k]').forEach(el => values[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value);
+        const r = await api('/api/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({values})});
+        sdirty = false; await loadSettings(); await loadStatus(); await loadData(); renderSettings();
+        msg(r.restart_needed ? 'Saved. Restart the service to apply the web page address/port.' : 'Saved.');
+      } else if (a === 'stest') {
+        msg('Testing…'); const r = await api('/api/npm/test', {method: 'POST'});
+        msg(`Connected to NPM (${r.proxy_hosts} proxy hosts). Save first if you changed the fields.`);
+      } else if (a === 'sreset') {
+        if (!confirm('Discard everything saved in the web page and go back to config.env?')) return;
+        await api('/api/settings', {method: 'DELETE'}); sdirty = false; await loadSettings(); await loadStatus(); await loadData(); renderSettings(); msg('Reset.');
+      } else if (a === 'srestart') {
+        if (!confirm('Restart the service now?')) return;
+        await api('/api/restart', {method: 'POST'}); msg('Restarting… reload this page in a few seconds.');
+      }
+    } catch (err) { msg(err.message, true); }
+    return;
+  }
   try {
+    if (a === 'addexcl' || a === 'rmexcl' || a === 'exclude') {
+      exclErr = '';
+      try {
+        if (a === 'addexcl') await api('/api/exclusions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value: $('#exv').value})});
+        else if (a === 'exclude') { if (!confirm(`Exclude ${b.dataset.ip}? It will be skipped by all future scans.`)) return;
+          await api('/api/exclusions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value: b.dataset.ip})}); }
+        else await api('/api/exclusions/' + id, {method: 'DELETE'});
+      } catch (err) { exclErr = err.message; if (a === 'exclude') alert(err.message); }
+      await loadExcl(); render(); return;
+    }
     if (a === 'add') {
       const r = $('#r' + id), cert = +r.querySelector('.cert').value;
       b.disabled = true; delete rowErr[id];
@@ -148,7 +238,7 @@ async function tick() {
   if (wasRunning && !status.running) { await loadData(); }
   wasRunning = status.running;
 }
-(async () => { await loadStatus(); await loadCerts(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();
+(async () => { await loadStatus(); await loadCerts(); await loadExcl(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();
 </script>
 </body>
 </html>

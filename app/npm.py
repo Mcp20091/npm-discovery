@@ -51,6 +51,8 @@ class NpmClient:
         self._expires = self._parse_expires(j.get("expires", ""))
 
     async def _request(self, method, url, **kw):
+        if not config.NPM_URL:
+            raise NpmError("NPM URL is not set - open the Settings tab")
         try:
             return await self._http.request(method, url, **kw)
         except httpx.HTTPError as e:

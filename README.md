@@ -39,7 +39,15 @@ does not exist), and enables a systemd service that starts on boot. Data (SQLite
 
 ## Configuration
 
-`/etc/npm-discovery/config.env` (see [config.env.example](config.env.example)):
+Everything below can be set in the web page on the **Settings** tab (including a Test NPM connection
+button). Values saved there are stored in the database and override `/etc/npm-discovery/config.env`
+(see [config.env.example](config.env.example)), which only provides the starting values. "Reset all to
+config.env" on the Settings tab discards the saved values. The listen address/port need a service restart
+(there is a Restart button). Skipped addresses are managed on the **Exclusions** tab; `SCAN_EXCLUDE`
+in the file is also honoured.
+
+The NPM password is stored in plain text in the database (`/var/lib/npm-discovery/discovery.db`, readable
+only by the service user) and is never sent back to the browser.
 
 | Variable | Default | Meaning |
 |---|---|---|
