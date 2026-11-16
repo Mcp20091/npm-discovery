@@ -37,7 +37,25 @@ main{overflow-x:auto}
 .err{color:var(--bad);font-size:12px}
 .empty{padding:30px;text-align:center;color:var(--mut)}
 code{font-size:12px}
-button.small{padding:1px 8px;font-size:12px}
+button.small{padding:3px 10px;font-size:13px}
+/* roomier text, tighter table */
+body{font-size:15px}
+a{color:var(--acc)}
+main{max-width:1800px}
+table{width:auto;max-width:100%}
+th{font-size:13px}
+th,td{padding:9px 12px}
+td{max-width:380px}
+td:last-child{max-width:none}
+button{font-size:14px;padding:6px 13px}
+.act{width:520px}
+.act .line{gap:8px;align-items:center}
+.act input[type=text]{min-width:130px}
+.act select{max-width:210px}
+.badge{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--mut);margin-right:8px;vertical-align:1px}
+.dt{font-weight:600}
+.tb{display:flex;align-items:center;gap:6px}
+.tb select{padding:5px 8px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);font:inherit}
 .sett{max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px 18px}
 .sett h3{margin:18px 0 6px;font-size:14px}
 .sf{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
@@ -198,18 +216,27 @@ function render() {
   const allOn = items.every(i => sel.has(i.ip));
   const defSel = tab !== 'new' ? '' : `<label style="display:flex;gap:6px;align-items:center;margin-left:auto"><small class="mut">Default certificate</small>
     <select id="defcert"><option value="0">None</option>${certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>`;
-  $('#content').innerHTML = `<div class="line" style="margin-bottom:10px;align-items:center"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
-    <label><input type="checkbox" id="grp" ${group ? 'checked' : ''}> Group by host</label>
-    ${group ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
+  const so = (v, cur, label) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`;
+  $('#content').innerHTML = `<div class="line" style="margin-bottom:12px;align-items:center;display:flex;flex-wrap:wrap;gap:10px"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
+    <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('none', groupMode, 'No grouping')}</select></label>
+    <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}</select>
+      <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Ascending' : '&#9660; Descending'}</button></label>
+    ${groupMode !== 'none' ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
     ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}
     ${defSel}</div>
-    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th>${group ? '<th>Host / service</th><th>Scheme</th><th>Title</th><th>Server</th><th>MAC / first &amp; last seen</th>' : '<th>Host / IP : Port</th><th>Scheme</th><th>Title</th><th>Server</th><th>Hostname</th><th>MAC</th><th>First / last seen</th>'}${extra}</tr></thead><tbody>` +
+    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>Host / service</th><th>Details</th><th>MAC</th><th>Last seen</th>${extra}</tr></thead><tbody>` +
     tableBody(items) + '</tbody></table>';
 }
 const sel = new Set();
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-let group = lsGet('npmd.group') !== '0';
+let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
+let sortBy = lsGet('npmd.sort') === 'name' ? 'name' : 'ip';
+let sortDir = lsGet('npmd.dir') === 'desc' ? 'desc' : 'asc';
+const dispName = i => i.host_name || i.hostname || '';
+const fshort = t => t ? new Date(t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : '-';
+const macHtml = m => m && m.mac ? `<code>${esc(m.mac)}</code><br>${m.vendor ? esc(m.vendor) : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}`
+  : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>';
 const collapsed = new Set((() => { try { return JSON.parse(lsGet('npmd.collapsed') || '[]'); } catch { return []; } })());
 const saveCollapsed = () => lsSet('npmd.collapsed', JSON.stringify([...collapsed]));
 const ipKey = ip => ip.split('.').reduce((a, o) => a * 256 + (+o || 0), 0);
@@ -219,20 +246,31 @@ function hostHtml(ip, hn, dns, withIp = true) {
   return `<span class="hn">${esc(main || ip)}</span>${main && withIp ? ` <span class="ipc">${esc(ip)}</span>` : ''}${hn && dns ? ` <small class="mut">${esc(dns)}</small>` : ''}`;
 }
 const renameBtn = (ip, name) => `<button class="small" data-a="rename" data-ip="${esc(ip)}" data-name="${esc(name || '')}" title="Give this host a friendly name (blank clears it)">Rename</button>`;
-function groupHead(ip, list) {
+function groupHead(key, list) {
+  const ips = [...new Set(list.map(i => i.ip))];
   const hn = (list.find(i => i.host_name) || {}).host_name || '', dns = (list.find(i => i.hostname) || {}).hostname || '';
-  const m = list.find(i => i.mac), open = !collapsed.has(ip);
-  return `<tr class="ghead" data-gh="${esc(ip)}"><td><input type="checkbox" class="sel" data-ip="${esc(ip)}" ${sel.has(ip) ? 'checked' : ''}></td>
-    <td colspan="4"><button class="caret" data-a="gtoggle" data-ip="${esc(ip)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button>${hostHtml(ip, hn, dns)}
-      <small class="mut"> · ${list.length} service${list.length > 1 ? 's' : ''}</small></td>
-    <td>${m ? `<code>${esc(m.mac)}</code><br>${m.vendor ? esc(m.vendor) : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}` : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>'}</td>
-    <td>${renameBtn(ip, hn)}</td></tr>`;
+  const open = !collapsed.has(key);
+  const head = ips.length === 1 ? hostHtml(ips[0], hn, dns)
+    : `<span class="hn">${esc(hn || dns || ips[0])}</span> ${ips.map(ip => `<span class="ipc">${esc(ip)}</span>`).join(' ')}`;
+  return `<tr class="ghead" data-gh="${esc(key)}"><td><input type="checkbox" class="selg" data-ips="${esc(ips.join(' '))}" ${ips.every(ip => sel.has(ip)) ? 'checked' : ''}></td>
+    <td colspan="2"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button>${head}
+      <small class="mut"> &middot; ${list.length} service${list.length > 1 ? 's' : ''}</small></td>
+    <td>${macHtml(list.find(i => i.mac))}</td>
+    <td colspan="2">${renameBtn(ips.join(' '), hn)}</td></tr>`;
+}
+function cmpItems(a, b) {
+  let r = 0;
+  if (sortBy === 'name') r = (dispName(a) || a.ip).toLowerCase().localeCompare((dispName(b) || b.ip).toLowerCase(), undefined, {numeric: true});
+  if (!r) r = ipKey(a.ip) - ipKey(b.ip);
+  if (sortDir === 'desc') r = -r;
+  return r || a.port - b.port;  // ports always ascending within a host
 }
 function tableBody(items) {
-  if (!group) return items.map(i => row(i, false)).join('');
+  const sorted = items.slice().sort(cmpItems);
+  if (groupMode === 'none') return sorted.map(i => row(i, false)).join('');
   const by = new Map();
-  items.forEach(i => { if (!by.has(i.ip)) by.set(i.ip, []); by.get(i.ip).push(i); });
-  return [...by.keys()].sort((a, b) => ipKey(a) - ipKey(b)).map(ip => groupHead(ip, by.get(ip)) + by.get(ip).map(i => row(i, true)).join('')).join('');
+  sorted.forEach(i => { const k = groupMode === 'ip' ? i.ip : 'n:' + (dispName(i) || i.ip).toLowerCase(); if (!by.has(k)) by.set(k, []); by.get(k).push(i); });
+  return [...by.entries()].map(([k, list]) => groupHead(k, list) + list.map(i => row(i, true, k)).join('')).join('');
 }
 function setCollapsed(ip, c) {  // toggles hidden on the rows, no re-render, so typed subdomains survive
   c ? collapsed.add(ip) : collapsed.delete(ip);
@@ -240,8 +278,8 @@ function setCollapsed(ip, c) {  // toggles hidden on the rows, no re-render, so 
   document.querySelectorAll('tr.ghead').forEach(r => { if (r.dataset.gh === ip) r.querySelector('.caret').innerHTML = c ? '&#9654;' : '&#9660;'; });
 }
 document.addEventListener('change', e => {
-  if (e.target.id !== 'grp') return;
-  group = e.target.checked; lsSet('npmd.group', group ? '1' : '0'); render();
+  if (e.target.id === 'grpmode') { groupMode = e.target.value; lsSet('npmd.groupmode', groupMode); render(); }
+  else if (e.target.id === 'sortby') { sortBy = e.target.value; lsSet('npmd.sort', sortBy); render(); }
 });
 const defCertId = () => (sett && sett.DEFAULT_CERT_ID) ? +sett.DEFAULT_CERT_ID.value || 0 : 0;
 document.addEventListener('change', async e => {
@@ -254,19 +292,20 @@ document.addEventListener('change', async e => {
   } catch (err) { alert(err.message); }
 });
 function selUi() { const b = document.querySelector('button[data-a=exclsel]'); if (b) { b.disabled = !sel.size; b.textContent = `Exclude selected hosts (${sel.size})`; } }
-document.addEventListener('change', e => {
-  const t = e.target;
+document.addEventListener('change', e => {  // selection is per IP: exclusions apply to a whole host
+  const t = e.target, cl = t.classList;
+  if (t.id !== 'selall' && !(cl && (cl.contains('sel') || cl.contains('selg')))) return;
+  const set = (ips, on) => ips.forEach(ip => on ? sel.add(ip) : sel.delete(ip));
   if (t.id === 'selall') {
-    document.querySelectorAll('.sel').forEach(c => { c.checked = t.checked; t.checked ? sel.add(c.dataset.ip) : sel.delete(c.dataset.ip); });
-    selUi();
-  } else if (t.classList && t.classList.contains('sel')) {
-    document.querySelectorAll('.sel').forEach(c => { if (c.dataset.ip === t.dataset.ip) c.checked = t.checked; });  // exclusions are per host
-    t.checked ? sel.add(t.dataset.ip) : sel.delete(t.dataset.ip);
-    selUi();
-  }
+    document.querySelectorAll('.sel').forEach(c => set([c.dataset.ip], t.checked));
+    document.querySelectorAll('.selg').forEach(c => set(c.dataset.ips.split(' '), t.checked));
+  } else set(cl.contains('selg') ? t.dataset.ips.split(' ') : [t.dataset.ip], t.checked);
+  document.querySelectorAll('.sel').forEach(c => c.checked = sel.has(c.dataset.ip));
+  document.querySelectorAll('.selg').forEach(c => c.checked = c.dataset.ips.split(' ').every(ip => sel.has(ip)));
+  selUi();
 });
 
-function row(i, grouped) {
+function row(i, grouped, gkey) {
   const gone = i.missing ? ' <span class="gone" title="Not found in the last scan">GONE</span>' : '';
   let action;
   if (tab === 'proxied') action = esc(i.proxy_domains.join(' | '));
@@ -274,28 +313,23 @@ function row(i, grouped) {
   else {
     const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
     action = `<div class="act" id="r${i.id}">
-      <div class="line"><input type="text" class="sub" value="${esc(i.suggestion)}"><span>.${esc(status.base_domain)}</span></div>
+      <div class="line"><input type="text" class="sub" value="${esc(i.suggestion)}"><span>.${esc(status.base_domain)}</span><select class="cert">${opts}</select></div>
       <div class="line"><label><input type="checkbox" class="be" checked> Block exploits</label>
-        <label><input type="checkbox" class="ws" checked> Websockets</label></div>
-      <div class="line"><select class="cert">${opts}</select></div>
-      <div class="line"><button class="primary" data-a="add" data-id="${i.id}">Add</button>
+        <label><input type="checkbox" class="ws" checked> Websockets</label><button class="primary" data-a="add" data-id="${i.id}">Add</button>
         <button data-a="dismiss" data-id="${i.id}">Dismiss</button>
         <button data-a="exclude" data-ip="${esc(i.ip)}" data-id="${i.id}" title="Never scan this IP again">Exclude host</button></div>
       <div class="err">${esc(rowErr[i.id] || '')}</div></div>`;
   }
   const url = `${i.scheme}://${i.ip}:${i.port}/`;
   const hurl = i.hostname ? `${i.scheme}://${i.hostname}:${i.port}/` : '';  // reverse-DNS name, if the scan found one
-  const links = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab">${grouped ? `<b>:${i.port}</b>` : `<b>${esc(i.ip)}</b>:${i.port}`} &#8599;</a>${gone}
+  const links = `<span class="badge">${esc(i.scheme)}</span><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab"><b>${esc(i.ip)}:${i.port}</b> &#8599;</a>${gone}
       ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}`;
-  const seen = `${fmt(i.first_seen)}<br>${fmt(i.last_seen)}`;
-  if (grouped) return `<tr class="svc" data-g="${esc(i.ip)}" ${collapsed.has(i.ip) ? 'hidden' : ''}><td></td><td>${links}</td><td>${esc(i.scheme)}</td>
-    <td>${esc(i.title) || '<span class="mut">-</span>'}</td><td>${esc(i.server)}</td><td class="mut">${seen}</td><td>${action}</td></tr>`;
+  const details = `<div class="dt">${i.title ? esc(i.title) : '<span class="mut">-</span>'}</div>${i.server ? `<small class="mut">${esc(i.server)}</small>` : ''}`;
+  const seen = `<span title="First seen ${esc(fmt(i.first_seen))}">${esc(fshort(i.last_seen))}</span>`;
+  if (grouped) return `<tr class="svc" data-g="${esc(gkey)}" ${collapsed.has(gkey) ? 'hidden' : ''}><td></td><td>${links}</td><td>${details}</td><td></td><td class="mut">${seen}</td><td>${action}</td></tr>`;
   return `<tr><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
-    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)}</div>${links}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
-    <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td>
-    <td>${i.mac ? `<code>${esc(i.mac)}</code><br>${i.vendor ? esc(i.vendor) : `<button data-a="vendor" data-id="${i.id}" class="small">Look up</button>`}`
-      : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>'}</td>
-    <td class="mut">${seen}</td><td>${action}</td></tr>`;
+    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)}</div>${links}</td><td>${details}</td>
+    <td>${macHtml(i)}</td><td class="mut">${seen}</td><td>${action}</td></tr>`;
 }
 
 document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); } if (tab === 'history') await loadHistory(); render(); return; }
@@ -306,11 +340,15 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
     document.querySelectorAll('tr.ghead').forEach(r => setCollapsed(r.dataset.gh, a === 'collapseall'));
     saveCollapsed(); return;
   }
+  if (a === 'sortdir') { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; lsSet('npmd.dir', sortDir); render(); return; }
   if (a === 'rename') {
-    const nm = prompt(`Name for ${b.dataset.ip} (leave blank to remove the saved name):`, b.dataset.name);
+    const ips = b.dataset.ip.split(' ');  // a host-name group can hold several IPs; all get the same name
+    const nm = prompt(`Name for ${ips.join(', ')} (leave blank to remove the saved name):`, b.dataset.name);
     if (nm === null) return;
-    try { await api('/api/hosts/name', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip: b.dataset.ip, name: nm})}); await loadData(); }
-    catch (err) { alert(err.message); }
+    try {
+      for (const ip of ips) await api('/api/hosts/name', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip, name: nm})});
+      await loadData();
+    } catch (err) { alert(err.message); }
     return;
   }
   if (a === 'hshow') {
