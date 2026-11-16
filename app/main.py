@@ -135,7 +135,10 @@ async def scan_stop():
 async def discoveries():
     await refresh_hosts()
     items = []
+    excl = all_exclusions()
     for r in db.q("SELECT * FROM discoveries ORDER BY ip, port"):
+        if any(excl_covers(s, r["ip"]) for s in excl):
+            continue
         proxies = match_proxy(r, _cache["hosts"])
         r["state"] = "dismissed" if r["dismissed"] else ("proxied" if proxies else "new")
         r["proxy_domains"] = proxies
@@ -266,6 +269,26 @@ def normalize_exclusion(v):
         raise HTTPException(400, "Enter an IPv4 address (192.168.1.5), a range (192.168.1.50-60) or a subnet (192.168.1.128/28)")
 
 
+def excl_covers(spec, ip):
+    """True if exclusion `spec` (IP, a.b.c.d-e range or CIDR) covers `ip`."""
+    try:
+        addr = ipaddress.IPv4Address(ip)
+        m = RANGE_RE.match(spec)
+        if m:
+            base = ipaddress.IPv4Address(m.group(1) + m.group(2))
+            last = int(addr) & 0xFF
+            return (int(addr) >> 8 == int(base) >> 8) and int(m.group(2)) <= last <= int(m.group(3))
+        if "/" in spec:
+            return addr in ipaddress.IPv4Network(spec, strict=False)
+        return addr == ipaddress.IPv4Address(spec)
+    except ValueError:
+        return False
+
+
+def all_exclusions():
+    return config.SCAN_EXCLUDE + [r["value"] for r in db.q("SELECT value FROM exclusions")]
+
+
 class ExclReq(BaseModel):
     value: str
 
@@ -280,6 +303,9 @@ async def exclusions():
 async def add_exclusion(req: ExclReq):
     v = normalize_exclusion(req.value)
     db.x("INSERT OR IGNORE INTO exclusions(value, added) VALUES(?, ?)", (v, time.time()))
+    for r in db.q("SELECT id, ip FROM discoveries"):
+        if excl_covers(v, r["ip"]):
+            db.x("DELETE FROM discoveries WHERE id=?", (r["id"],))
     return {"ok": True, "value": v}
 
 

@@ -218,7 +218,11 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
           await api('/api/exclusions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value: b.dataset.ip})}); }
         else await api('/api/exclusions/' + id, {method: 'DELETE'});
       } catch (err) { exclErr = err.message; if (a === 'exclude') alert(err.message); }
-      await loadExcl(); render(); return;
+      const typed = (a === 'addexcl' && $('#exv')) ? $('#exv').value : '';
+      await loadExcl();
+      if (a === 'exclude') await loadData(); else render();
+      if (a !== 'exclude') { const x = $('#exv'); if (x) { x.value = exclErr ? typed : ''; x.focus(); } }
+      return;
     }
     if (a === 'add') {
       const r = $('#r' + id), cert = +r.querySelector('.cert').value;
