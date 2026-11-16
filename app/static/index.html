@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NPM Discovery</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--fg:#1c2330;--mut:#6b7585;--line:#e2e5ea;--acc:#2563eb;--bad:#c62828;--ok:#2e7d32;--warn:#b26a00}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--fg:#e6e9ef;--mut:#8b95a5;--line:#2b3340;--acc:#5b8def;--bad:#ef6b6b;--ok:#5fc16a;--warn:#e0a040}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0;margin-right:auto}
+.pill{padding:2px 10px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+.running{color:var(--warn)}.finished{color:var(--ok)}.failed{color:var(--bad)}
+button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+button:disabled{opacity:.5;cursor:default}
+main{padding:16px 20px;max-width:1400px;margin:auto}
+.tabs{display:flex;gap:4px;margin-bottom:12px}
+.tab{padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+.tab.active{background:var(--card);border-color:var(--line);font-weight:600}
+.banner{padding:10px 14px;border-radius:6px;margin-bottom:12px;background:color-mix(in srgb,var(--bad) 15%,var(--card));border:1px solid var(--bad)}
+.banner.info{background:var(--card);border-color:var(--line)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--mut);font-weight:600;white-space:nowrap}
+td.mut{color:var(--mut);font-size:12px}
+.act{display:flex;flex-direction:column;gap:6px;min-width:260px}
+.act .line{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.act input[type=text]{flex:1;min-width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.act select{max-width:100%;padding:5px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line)}
+.act label{font-size:12px;color:var(--mut);white-space:nowrap}
+.gone{color:var(--bad);font-weight:600;font-size:12px}
+.err{color:var(--bad);font-size:12px}
+.empty{padding:30px;text-align:center;color:var(--mut)}
+code{font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>NPM Discovery</h1>
+  <span id="last" class="mut"></span>
+  <span id="st" class="pill"></span>
+  <button id="scan" class="primary">Scan now</button>
+</header>
+<main>
+  <div id="banners"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="content"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let tab = 'new', data = {items: [], npm_error: null}, certs = [], status = {}, rowErr = {};
+const TABS = [['new','New'],['proxied','Already proxied'],['dismissed','Dismissed']];
+
+const fmt = t => t ? new Date(t*1000).toLocaleString() : '-';
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let j = {}; try { j = await r.json(); } catch {}
+  if (!r.ok) throw new Error(j.detail || j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+async function loadStatus() {
+  try { status = await api('/api/status'); } catch (e) { return; }
+  const l = status.last;
+  const s = status.running ? 'running' : (l ? l.status : 'never run');
+  $('#st').className = 'pill ' + s; $('#st').textContent = 'Scan: ' + s;
+  $('#last').textContent = l ? 'Last scan: ' + fmt(l.finished || l.started) + (l.status === 'finished' ? ` (${l.found} services)` : '') : 'No scan yet';
+  $('#scan').disabled = status.running;
+  renderBanners();
+}
+
+function renderBanners() {
+  let h = '';
+  (status.config_problems || []).forEach(p => h += `<div class="banner">${esc(p)}</div>`);
+  if (status.last && status.last.status === 'failed') h += `<div class="banner">Scan failed: ${esc(status.last.error)}</div>`;
+  if (data.npm_error) h += `<div class="banner">${esc(data.npm_error)}</div>`;
+  $('#banners').innerHTML = h;
+}
+
+async function loadData() {
+  try { data = await api('/api/discoveries'); } catch (e) { data = {items: [], npm_error: e.message}; }
+  renderBanners(); render();
+}
+async function loadCerts() {
+  try { certs = (await api('/api/certificates')).items; } catch { certs = []; }
+}
+
+function render() {
+  const count = k => data.items.filter(i => i.state === k).length;
+  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}">${n} (${count(k)})</div>`).join('');
+  const items = data.items.filter(i => i.state === tab);
+  if (!items.length) { $('#content').innerHTML = `<div class="empty">Nothing here.</div>`; return; }
+  const extra = tab === 'proxied' ? '<th>Proxy host</th>' : '<th>Action</th>';
+  $('#content').innerHTML = `<table><thead><tr><th>IP : Port</th><th>Scheme</th><th>Title</th><th>Server</th><th>Hostname</th><th>First / last seen</th>${extra}</tr></thead><tbody>` +
+    items.map(row).join('') + '</tbody></table>';
+}
+
+function row(i) {
+  const gone = i.missing ? ' <span class="gone" title="Not found in the last scan">GONE</span>' : '';
+  let action;
+  if (tab === 'proxied') action = esc(i.proxy_domains.join(' | '));
+  else if (tab === 'dismissed') action = `<button data-a="restore" data-id="${i.id}">Restore</button>`;
+  else {
+    const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    action = `<div class="act" id="r${i.id}">
+      <div class="line"><input type="text" class="sub" value="${esc(i.suggestion)}"><span>.${esc(status.base_domain)}</span></div>
+      <div class="line"><label><input type="checkbox" class="be" checked> Block exploits</label>
+        <label><input type="checkbox" class="ws" checked> Websockets</label></div>
+      <div class="line"><select class="cert">${opts}</select></div>
+      <div class="line"><button class="primary" data-a="add" data-id="${i.id}">Add</button>
+        <button data-a="dismiss" data-id="${i.id}">Dismiss</button></div>
+      <div class="err">${esc(rowErr[i.id] || '')}</div></div>`;
+  }
+  return `<tr><td><b>${esc(i.ip)}</b>:${i.port}${gone}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
+    <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td><td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
+}
+
+document.addEventListener('click', async e => {
+  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; render(); return; }
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const id = b.dataset.id, a = b.dataset.a;
+  try {
+    if (a === 'add') {
+      const r = $('#r' + id), cert = +r.querySelector('.cert').value;
+      b.disabled = true; delete rowErr[id];
+      await api(`/api/discoveries/${id}/add`, {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({subdomain: r.querySelector('.sub').value, block_exploits: r.querySelector('.be').checked,
+          websockets: r.querySelector('.ws').checked, certificate_id: cert || null})});
+    } else await api(`/api/discoveries/${id}/${a}`, {method: 'POST'});
+    await loadData();
+  } catch (err) {
+    rowErr[id] = err.message; b.disabled = false; render();
+  }
+});
+
+$('#scan').onclick = async () => {
+  try { await api('/api/scan', {method: 'POST'}); } catch (e) { alert(e.message); }
+  loadStatus();
+};
+
+let wasRunning = false;
+async function tick() {
+  await loadStatus();
+  if (wasRunning && !status.running) { await loadData(); }
+  wasRunning = status.running;
+}
+(async () => { await loadStatus(); await loadCerts(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();
+</script>
+</body>
+</html>
