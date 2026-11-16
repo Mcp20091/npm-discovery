@@ -45,13 +45,15 @@ def init():
         CREATE INDEX IF NOT EXISTS scan_hits_scan ON scan_hits(scan_id);
         CREATE TABLE IF NOT EXISTS scan_log(scan_id INTEGER NOT NULL, ts REAL, level TEXT, msg TEXT);
         CREATE INDEX IF NOT EXISTS scan_log_scan ON scan_log(scan_id);
+        CREATE TABLE IF NOT EXISTS oui_cache(
+            oui TEXT NOT NULL, provider TEXT NOT NULL, vendor TEXT, ts REAL, PRIMARY KEY(oui, provider));
         """)
         cols = {r["name"] for r in _conn.execute("PRAGMA table_info(scans)")}
         for c in ("new_count", "gone_count"):  # added after v1: upgrade existing databases
             if c not in cols:
                 _conn.execute(f"ALTER TABLE scans ADD COLUMN {c} INTEGER DEFAULT 0")
         dcols = {r["name"] for r in _conn.execute("PRAGMA table_info(discoveries)")}
-        for c in ("mac", "vendor"):
+        for c in ("mac", "vendor", "vendor_source"):
             if c not in dcols:
                 _conn.execute(f"ALTER TABLE discoveries ADD COLUMN {c} TEXT")
         _conn.execute("UPDATE scans SET status='failed', error='Interrupted by restart', finished=? "
@@ -101,6 +103,8 @@ def save_scan_results(results, scan_start, scan_id=None):
                   last_seen=excluded.last_seen, missing=0,
                   vendor=CASE WHEN excluded.mac IS NOT NULL AND excluded.mac IS NOT discoveries.mac
                               THEN NULL ELSE vendor END,
+                  vendor_source=CASE WHEN excluded.mac IS NOT NULL AND excluded.mac IS NOT discoveries.mac
+                              THEN NULL ELSE vendor_source END,
                   mac=COALESCE(excluded.mac, mac)""",
                          (r["ip"], r["port"], r["scheme"], r["title"], r["server"], r["hostname"], now, now,
                           r.get("mac")))

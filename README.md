@@ -63,6 +63,7 @@ only by the service user) and is never sent back to the browser.
 | `SCAN_PORTS` | common homelab list | Ports to check |
 | `SCAN_ALL_PORTS` | `false` | Scan all 65535 ports (slow) |
 | `PROBE_TIMEOUT` | `5` | Seconds per HTTP/HTTPS probe |
+| `MAC_PROVIDERS` | `nmap` | Enabled MAC vendor lookup providers, comma separated: `nmap`, `ieee`, `macvendors`, `maclookup` (see below) |
 | `WEB_HOST`, `WEB_PORT` | `0.0.0.0`, `8080` | Web UI bind address and port |
 
 Quote values containing spaces or special characters. The file is readable only by root and the service user.
@@ -72,6 +73,27 @@ Quote values containing spaces or special characters. The file is readable only 
 Open `http://<container-ip>:8080`. The header shows the last scan time and status
 (running / finished / failed); **Scan now** starts a scan on demand. Errors from NPM (login failure,
 unreachable, API errors) appear as red banners, and Add errors show under the row.
+
+## MAC lookup providers
+
+MAC addresses come from the ARP table (same network segment only). The vendor behind a MAC is looked up
+when you click **Look up** (per host) or **Look up all MAC vendors**, using the providers ticked on
+**Settings > MAC address lookup**. Enabled providers are asked in this fixed order and the first answer wins:
+
+1. `nmap` (default): the offline list that ships with nmap.
+2. `ieee`: a full offline copy of the IEEE OUI registry. Click **Download IEEE list** once (the server
+   downloads `oui.csv`, about 6 MB, from standards-oui.ieee.org and keeps it in the data directory);
+   lookups then use the local file only.
+3. `macvendors`: online, api.macvendors.com (free, about 1 request per second).
+4. `maclookup`: online, api.maclookup.app (free tier, rate limited).
+
+**Privacy:** the two online providers are off by default, are only contacted after you click a Look up
+button (never during a scan), and receive **only the first 3 bytes of the MAC** (the manufacturer prefix, e.g.
+`B8:27:EB`), never the full address, an IP or a host name. Each answer is cached, so a prefix is asked for once;
+ten devices from one vendor cost one request. Requests are spaced 1.1 s apart and stop on a rate-limit (HTTP 429)
+answer. No account or API key is used. Randomized (locally administered) MACs are recognised locally without
+any lookup. The vendor text comes from third parties, so it is shortened to 100 characters and stripped of
+control characters; hover the vendor name to see which provider answered.
 
 ## Web page password (optional)
 
