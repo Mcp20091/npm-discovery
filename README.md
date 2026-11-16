@@ -108,6 +108,13 @@ Do not expose the web UI to the internet even with a password.
   anything changes, so a bad file changes nothing.
 - Settings that come only from `config.env` are not in the backup; only values saved in the web page are.
 
+## Scanning specific addresses
+
+**Scan IP / range...** in the header scans only what you type instead of the saved subnets: one IP, a range
+(`192.168.1.60-70` or `192.168.1.10-192.168.1.40`), a subnet (`192.168.2.0/28`), or a comma separated list of
+those. Excluded addresses are still skipped. It saves what it finds like any other scan, but only hosts inside
+the typed targets can be flagged as gone. A hand-typed scan is limited to 65,536 addresses.
+
 ## Logs and service control
 
 ```bash

@@ -22,6 +22,7 @@ SECRET_KEYS = {"NPM_PASSWORD", "_auth_hash"}
 DISC_COLS = ("ip", "port", "scheme", "title", "server", "hostname", "first_seen", "last_seen", "dismissed", "missing", "mac", "vendor")
 SCAN_COLS = ("id", "started", "finished", "status", "error", "found", "new_count", "gone_count")
 HIT_COLS = ("scan_id", "ip", "port", "scheme", "title", "server", "hostname")
+LOG_COLS = ("scan_id", "ts", "level", "msg")
 
 
 @router.get("/api/history")
@@ -48,17 +49,19 @@ async def backup(results: bool = True, secrets: bool = False):
                      if secrets or r["key"] not in SECRET_KEYS},
         "exclusions": [r["value"] for r in db.q("SELECT value FROM exclusions ORDER BY id")],
         "host_names": {r["ip"]: r["name"] for r in db.q("SELECT ip, name FROM host_names ORDER BY ip")},
+        "notes": [dict(r) for r in db.q("SELECT kind, key, note FROM notes ORDER BY kind, key")],
     }
     if results:
         out["discoveries"] = db.q("SELECT %s FROM discoveries ORDER BY id" % ",".join(DISC_COLS))
         out["scans"] = db.q("SELECT %s FROM scans ORDER BY id" % ",".join(SCAN_COLS))
         out["scan_hits"] = db.q("SELECT %s FROM scan_hits" % ",".join(HIT_COLS))
+        out["scan_log"] = db.q("SELECT %s FROM scan_log ORDER BY rowid" % ",".join(LOG_COLS))
     name = time.strftime("npm-discovery-backup-%Y%m%d-%H%M.json")
     return Response(json.dumps(out, indent=1), media_type="application/json",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
-NUM_COLS = {"port", "first_seen", "last_seen", "dismissed", "missing", "id", "started", "finished", "found",
+NUM_COLS = {"ts", "port", "first_seen", "last_seen", "dismissed", "missing", "id", "started", "finished", "found",
             "new_count", "gone_count", "scan_id"}
 
 
@@ -121,6 +124,33 @@ def _validate(data):
             if name.strip():
                 names.append((ip, name.strip()))
         clean["host_names"] = names
+    if "notes" in data:
+        raw = data["notes"] or []
+        if not isinstance(raw, list):
+            raise HTTPException(400, "Backup has malformed notes")
+        notes = {}
+        for n in raw:
+            if not (isinstance(n, dict) and all(isinstance(n.get(k), str) for k in ("kind", "key", "note"))):
+                raise HTTPException(400, "Backup has a malformed note")
+            if n["kind"] not in ("host", "service"):
+                raise HTTPException(400, "Backup has a note of an unknown kind")
+            ip, sep, port = n["key"].strip().partition(":")
+            try:
+                ip = str(ipaddress.IPv4Address(ip))
+            except ValueError:
+                raise HTTPException(400, f"Backup has a note for an invalid IP: {n['key']}")
+            if n["kind"] == "host":
+                key = ip if not sep else None
+            else:
+                key = f"{ip}:{int(port)}" if port.isascii() and port.isdigit() and 1 <= int(port) <= 65535 else None
+            if key is None:
+                raise HTTPException(400, f"Backup has a note with an invalid key: {n['key']}")
+            text = n["note"].strip()
+            if len(text) > 2000:
+                raise HTTPException(400, f"Backup has a note that is too long: {key}")
+            if text:
+                notes[(n["kind"], key)] = text
+        clean["notes"] = [(k, key, t) for (k, key), t in notes.items()]
     if "discoveries" in data:
         rows = []
         for d in data["discoveries"] or []:
@@ -131,6 +161,13 @@ def _validate(data):
     if "scans" in data:
         clean["scans"] = [_check_row(s, SCAN_COLS, "scan") for s in data["scans"] or []]
         clean["scan_hits"] = [_check_row(h, HIT_COLS, "scan result") for h in data.get("scan_hits") or []]
+        logs = []
+        for l in data.get("scan_log") or []:  # absent in older backups
+            row = _check_row(l, LOG_COLS, "scan log line")
+            if row[2] not in ("info", "warn", "error"):
+                raise HTTPException(400, "Backup has an invalid level in a scan log line")
+            logs.append(row[:3] + ((row[3] or "")[:500],))
+        clean["scan_log"] = logs
     return clean
 
 
@@ -157,6 +194,9 @@ async def restore(request: Request):
             if "host_names" in clean:
                 c.execute("DELETE FROM host_names")
                 c.executemany("INSERT OR REPLACE INTO host_names VALUES(?,?)", clean["host_names"])
+            if "notes" in clean:
+                c.execute("DELETE FROM notes")
+                c.executemany("INSERT OR REPLACE INTO notes VALUES(?,?,?)", clean["notes"])
             if "discoveries" in clean:
                 c.execute("DELETE FROM discoveries")
                 c.executemany("INSERT OR REPLACE INTO discoveries(%s) VALUES(%s)" % (
@@ -164,14 +204,16 @@ async def restore(request: Request):
             if "scans" in clean:
                 c.execute("DELETE FROM scans")
                 c.execute("DELETE FROM scan_hits")
-                c.execute("DELETE FROM scan_log")  # scan ids come from the file, so old logs would not match
+                c.execute("DELETE FROM scan_log")  # scan ids come from the file; its own log lines replace these
                 c.executemany("INSERT INTO scans(%s) VALUES(%s)" % (
                     ",".join(SCAN_COLS), ",".join("?" * len(SCAN_COLS))), clean["scans"])
                 c.executemany("INSERT INTO scan_hits(%s) VALUES(%s)" % (
                     ",".join(HIT_COLS), ",".join("?" * len(HIT_COLS))), clean["scan_hits"])
+                c.executemany("INSERT INTO scan_log(%s) VALUES(%s)" % (
+                    ",".join(LOG_COLS), ",".join("?" * len(LOG_COLS))), clean["scan_log"])
             c.commit()
         except Exception:
             c.rollback()
             raise
     hooks["reload"]()
-    return {"ok": True, "restored": sorted(k for k in clean if k != "scan_hits")}
+    return {"ok": True, "restored": sorted(k for k in clean if k not in ("scan_hits", "scan_log"))}

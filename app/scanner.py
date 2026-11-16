@@ -16,7 +16,7 @@ TLS_FIRST = {443, 8443, 8444, 9443, 4443, 5001, 8006, 8007}
 HOSTNAME_RE = re.compile(r"[A-Za-z0-9_]([A-Za-z0-9_.-]{0,251}[A-Za-z0-9_])?")
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 LOG_MAX = 400  # lines stored per scan
-state = {"running": False, "stop": False, "proc": None, "tasks": []}
+state = {"running": False, "stop": False, "proc": None, "tasks": [], "targets": None}
 
 
 def make_logger(scan_id):
@@ -83,7 +83,7 @@ def nmap_args():
     excl = config.SCAN_EXCLUDE + [r["value"] for r in db.q("SELECT value FROM exclusions")]
     if excl:
         args += ["--exclude", ",".join(excl)]
-    args += config.SCAN_SUBNETS
+    args += state.get("targets") or config.SCAN_SUBNETS  # a hand-typed scan overrides the saved subnets
     return args
 
 
@@ -174,21 +174,21 @@ def _ipkey(ip):
     return tuple(int(o) for o in ip.split("."))
 
 
-async def run_scan():
-    """Returns False if a scan was already running."""
+async def run_scan(only=None):
+    """Returns False if a scan was already running. `only` = hand-typed targets instead of the saved subnets."""
     if state["running"]:
         return False
-    state.update(running=True, stop=False, proc=None, tasks=[])
+    state.update(running=True, stop=False, proc=None, tasks=[], targets=only)
     state.pop("nmap_info", None)
     started = time.time()
     scan_id = db.x("INSERT INTO scans(started,status) VALUES(?, 'running')", (started,)).lastrowid
     L = make_logger(scan_id)
     try:
-        if not config.SCAN_SUBNETS:
+        if not (only or config.SCAN_SUBNETS):
             raise RuntimeError("SCAN_SUBNETS is not set")
         excl = config.SCAN_EXCLUDE + [r["value"] for r in db.q("SELECT value FROM exclusions")]
-        L("info", "Scan started. Subnets: %s. %d excluded entries. %s. %s mode." % (
-            ", ".join(config.SCAN_SUBNETS), len(excl),
+        L("info", "%s: %s. %d excluded entries (excluded addresses are skipped here too). %s. %s mode." % (
+            "Targeted scan started" if only else "Scan started. Subnets", ", ".join(only or config.SCAN_SUBNETS), len(excl),
             "All 65535 ports" if config.SCAN_ALL_PORTS else f"{len(config.SCAN_PORTS)} ports",
             "Gentle" if config.SCAN_GENTLE else "Normal"))
         open_ports = await run_nmap()
@@ -251,7 +251,7 @@ async def run_scan():
             r["mac"] = arp.get(r["ip"])
         L("info", f"MAC address known for {len({r['ip'] for r in results if r['mac']})} of {len(hosts_ok)} hosts "
                   f"(ARP table had {len(arp)} entries; hosts on another network segment never show a MAC).")
-        new, gone = db.save_scan_results(results, started, scan_id)
+        new, gone = db.save_scan_results(results, started, scan_id, scope=only)
         L("info", f"Finished in {int(time.time() - started)}s: {len(results)} services, {new} new, {gone} gone.")
         db.x("UPDATE scans SET status='finished', finished=?, found=?, new_count=?, gone_count=? WHERE id=?",
              (time.time(), len(results), new, gone, scan_id))
@@ -263,5 +263,5 @@ async def run_scan():
         db.x("UPDATE scans SET status='failed', finished=?, error=? WHERE id=?",
              (time.time(), str(e), scan_id))
     finally:
-        state.update(running=False, stop=False, proc=None, tasks=[])
+        state.update(running=False, stop=False, proc=None, tasks=[], targets=None)
     return True

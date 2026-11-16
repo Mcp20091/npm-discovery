@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import auth, backup, config, db, macs, scanner
+from . import auth, backup, config, db, macs, scanner, targets
 from .npm import NpmClient, NpmError
 
 log = logging.getLogger("npm-discovery")
@@ -35,8 +35,8 @@ async def refresh_hosts(force=False):
     _cache["at"] = time.time()
 
 
-async def scan_and_refresh():
-    await scanner.run_scan()
+async def scan_and_refresh(only=None):
+    await scanner.run_scan(only)
     await refresh_hosts(force=True)
 
 
@@ -120,11 +120,21 @@ async def status():
             "auth": auth.enabled()}
 
 
+class ScanReq(BaseModel):
+    targets: str | None = None  # empty = the saved subnets; otherwise IPs / ranges / subnets typed by the user
+
+
 @app.post("/api/scan")
-async def scan_now():
+async def scan_now(req: ScanReq | None = None):
     if scanner.state["running"]:
         raise HTTPException(409, "A scan is already running")
-    asyncio.create_task(scan_and_refresh())
+    only = None
+    if req and req.targets and req.targets.strip():
+        try:
+            only = targets.parse_list(req.targets)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    asyncio.create_task(scan_and_refresh(only))
     await asyncio.sleep(0.1)
     return {"started": True}
 
@@ -142,6 +152,7 @@ async def discoveries():
     items = []
     excl = all_exclusions()
     names = {n["ip"]: n["name"] for n in db.q("SELECT ip, name FROM host_names")}
+    notes = {(n["kind"], n["key"]): n["note"] for n in db.q("SELECT kind, key, note FROM notes")}
     for r in db.q("SELECT * FROM discoveries ORDER BY ip, port"):
         if any(excl_covers(s, r["ip"]) for s in excl):
             continue
@@ -150,8 +161,51 @@ async def discoveries():
         r["proxy_domains"] = proxies
         r["suggestion"] = suggest(r)
         r["host_name"] = names.get(r["ip"], "")
+        r["note"] = notes.get(("service", f"{r['ip']}:{r['port']}"), "")
+        r["host_note"] = notes.get(("host", r["ip"]), "")
         items.append(r)
     return {"items": items, "npm_error": _cache["error"]}
+
+
+NOTE_MAX = 2000
+
+
+class NoteReq(BaseModel):
+    kind: str
+    key: str
+    note: str = ""
+
+
+def check_note_key(kind, key):
+    """Returns the canonical key ('ip' for hosts, 'ip:port' for services) or raises 400."""
+    if kind not in ("host", "service"):
+        raise HTTPException(400, "Unknown note kind")
+    ip, sep, port = key.strip().partition(":")
+    try:
+        ip = str(ipaddress.IPv4Address(ip))
+    except ValueError:
+        raise HTTPException(400, "Not a valid IPv4 address")
+    if kind == "host":
+        if sep:
+            raise HTTPException(400, "A host note is keyed by IP only")
+        return ip
+    if not (port.isascii() and port.isdigit() and 1 <= int(port) <= 65535):
+        raise HTTPException(400, "Not a valid port")
+    return f"{ip}:{int(port)}"
+
+
+@app.put("/api/notes")
+async def set_note(req: NoteReq):
+    key = check_note_key(req.kind, req.key)
+    note = req.note.strip()
+    if len(note) > NOTE_MAX:
+        raise HTTPException(400, f"Note is too long (max {NOTE_MAX} characters)")
+    if note:
+        db.x("INSERT INTO notes(kind, key, note) VALUES(?,?,?) ON CONFLICT(kind, key) DO UPDATE SET note=excluded.note",
+             (req.kind, key, note))
+    else:
+        db.x("DELETE FROM notes WHERE kind=? AND key=?", (req.kind, key))
+    return {"ok": True, "kind": req.kind, "key": key, "note": note}
 
 
 class HostNameReq(BaseModel):
@@ -281,40 +335,14 @@ async def restart():
     return {"ok": True}
 
 
-RANGE_RE =re.compile(r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.)(\d{1,3})-(\d{1,3})$")
-
-
 def normalize_exclusion(v):
-    """Accept a single IPv4, a CIDR, or a last-octet range like 192.168.1.50-60."""
-    v = v.strip()
-    m = RANGE_RE.match(v)
     try:
-        if m:
-            ipaddress.IPv4Address(m.group(1) + m.group(2))
-            if not (int(m.group(2)) <= int(m.group(3)) <= 255):
-                raise ValueError
-            return v
-        if "/" in v:
-            return str(ipaddress.IPv4Network(v, strict=False))
-        return str(ipaddress.IPv4Address(v))
-    except ValueError:
-        raise HTTPException(400, "Enter an IPv4 address (192.168.1.5), a range (192.168.1.50-60) or a subnet (192.168.1.128/28)")
+        return targets.normalize(v)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
-def excl_covers(spec, ip):
-    """True if exclusion `spec` (IP, a.b.c.d-e range or CIDR) covers `ip`."""
-    try:
-        addr = ipaddress.IPv4Address(ip)
-        m = RANGE_RE.match(spec)
-        if m:
-            base = ipaddress.IPv4Address(m.group(1) + m.group(2))
-            last = int(addr) & 0xFF
-            return (int(addr) >> 8 == int(base) >> 8) and int(m.group(2)) <= last <= int(m.group(3))
-        if "/" in spec:
-            return addr in ipaddress.IPv4Network(spec, strict=False)
-        return addr == ipaddress.IPv4Address(spec)
-    except ValueError:
-        return False
+excl_covers = targets.covers
 
 
 def all_exclusions():
