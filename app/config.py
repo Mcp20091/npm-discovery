@@ -24,10 +24,12 @@ SPEC = {
     "SCAN_GENTLE": ("bool", "false"),
     "PROBE_TIMEOUT": ("float", "5"),
     "DEFAULT_CERT_ID": ("certid", "0"),  # NPM certificate preselected in the New tab; 0 = none
+    "MAC_PROVIDERS": ("providers", "nmap"),  # enabled MAC vendor lookup providers; asked in PROVIDER_IDS order
     "WEB_HOST": ("str", "0.0.0.0"),
     "WEB_PORT": ("int", "8080"),
 }
-RESTART_KEYS = {"WEB_HOST", "WEB_PORT"}
+PROVIDER_IDS = ("nmap", "ieee", "macvendors", "maclookup")  # fixed lookup order
+RESTART_KEYS ={"WEB_HOST", "WEB_PORT"}
 NPM_KEYS = {"NPM_URL", "NPM_EMAIL", "NPM_PASSWORD", "NPM_VERIFY_TLS"}
 
 # Read-only: from config.env only (managed in the UI on the Exclusions tab).
@@ -108,6 +110,12 @@ def parse(name, s):
                     raise ValueError(f"{name}: '{c}' is not a valid IPv4 subnet (e.g. 192.168.1.0/24)")
                 out.append(c)
         return out
+    if kind == "providers":
+        ids = {p.strip().lower() for p in s.replace("\n", ",").split(",") if p.strip()}
+        bad = sorted(ids - set(PROVIDER_IDS))
+        if bad:
+            raise ValueError(f"{name}: unknown provider '{bad[0]}' (valid: {', '.join(PROVIDER_IDS)})")
+        return [p for p in PROVIDER_IDS if p in ids]
     if kind == "url":
         s = s.rstrip("/")
         if s and not s.lower().startswith(("http://", "https://")):

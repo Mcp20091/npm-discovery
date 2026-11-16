@@ -142,8 +142,24 @@ function renderHistory() {
       <td>${s.status === 'finished' ? `<button data-a="hshow" data-id="${s.id}" class="small">Services</button> ` : ''}<button data-a="hlog" data-id="${s.id}" class="small">Log</button></td></tr>
       <tr id="h${s.id}" hidden><td colspan="7" class="mut"></td></tr><tr id="l${s.id}" hidden><td colspan="7"></td></tr>`).join('') + '</tbody></table>';
 }
-let sett = null, sdirty = false, smsg = {text: '', bad: false};
-async function loadSettings() { try { sett = (await api('/api/settings')).settings; } catch (e) { smsg = {text: e.message, bad: true}; } }
+let sett = null, sdirty = false, smsg = {text: '', bad: false}, ieee = {exists: false};
+async function loadSettings() {
+  try { sett = (await api('/api/settings')).settings; } catch (e) { smsg = {text: e.message, bad: true}; }
+  try { ieee = await api('/api/macs/ieee'); } catch {}
+}
+const PROVIDERS = [
+  ['nmap', 'nmap list (offline)', 'The vendor list that ships with nmap. Nothing leaves this machine. Always asked first.'],
+  ['ieee', 'IEEE registry (offline)', 'The full IEEE OUI registry, downloaded once with the button below and then used locally. Nothing is sent when you look up a vendor.'],
+  ['macvendors', 'api.macvendors.com (online)', 'Asks api.macvendors.com. Only the first 3 bytes of the MAC (the manufacturer prefix, e.g. B8:27:EB) are sent, never the full address, and only when you click Look up. Answers are cached. Free tier: about 1 request per second.'],
+  ['maclookup', 'api.maclookup.app (online)', 'Asks api.maclookup.app. Only the first 3 bytes of the MAC (the manufacturer prefix, e.g. B8:27:EB) are sent, never the full address, and only when you click Look up. Answers are cached. Free tier is rate limited.']];
+const SOURCES = {nmap: 'nmap list (offline)', ieee: 'IEEE registry copy (offline)', macvendors: 'api.macvendors.com (online, cached)',
+  maclookup: 'api.maclookup.app (online, cached)', randomized: 'Locally administered (randomized) address, no lookup was done'};
+function ieeeInfo() {
+  if (!ieee.exists) return 'Not downloaded yet.';
+  if (ieee.error) return 'Copy on disk is unusable: ' + ieee.error;
+  const d = Math.floor(ieee.age_days);
+  return `${ieee.entries} entries, downloaded ${fmt(ieee.date)} (${d < 1 ? 'today' : d + ' day' + (d > 1 ? 's' : '') + ' ago'}).`;
+}
 const FIELDS = [
   ['Nginx Proxy Manager', [
     ['NPM_URL', 'text', 'NPM URL', 'e.g. http://192.168.1.10:81'],
@@ -160,6 +176,7 @@ const FIELDS = [
     ['SCAN_ALL_PORTS', 'bool', 'Scan all 65535 ports', 'Much slower and more likely to trigger security software'],
     ['SCAN_GENTLE', 'bool', 'Gentle scan', 'Slower (rate-limited, few parallel probes) but less likely to trigger security software or upset the network'],
     ['PROBE_TIMEOUT', 'number', 'Probe timeout (seconds)', '']]],
+  ['MAC address lookup', [['MAC_PROVIDERS', 'providers']]],
   ['Web page', [
     ['WEB_HOST', 'text', 'Listen address', 'Needs a service restart'],
     ['WEB_PORT', 'number', 'Listen port', 'Needs a service restart']]]];
@@ -167,6 +184,13 @@ function renderSettings() {
   if (!sett) { $('#content').innerHTML = '<div class="empty">Loading…</div>'; return; }
   const field = ([k, t, label, hint]) => {
     const s = sett[k], v = esc(s.value);
+    if (t === 'providers') {
+      const on = String(s.value).toLowerCase().split(',').map(x => x.trim());
+      return `<div class="sf"><span class="sl">Providers, asked in this order; the first answer wins<small> · ${s.source === 'ui' ? 'saved here' : s.source === 'config' ? 'from config.env' : 'default'}</small></span>` +
+        PROVIDERS.map(([id, name, h]) => `<label class="sf"><span><input type="checkbox" data-prov="${id}" ${on.includes(id) ? 'checked' : ''}> ${name}</span><small class="mut">${h}</small></label>` +
+          (id === 'ieee' ? `<div class="line"><button data-a="sieee">Download IEEE list</button><small class="mut" id="ieeeinfo">${esc(ieeeInfo())}</small></div>` : '')).join('') +
+        `<small class="mut">Randomized (locally administered) addresses are recognised without any lookup. Online providers are never contacted during a scan.</small></div>`;
+    }
     let input;
     if (t === 'bool') input = `<input type="checkbox" data-k="${k}" ${String(s.value).toLowerCase() === 'true' ? 'checked' : ''}>`;
     else if (t === 'cert') input = `<select data-k="${k}"><option value="0">No default certificate</option>${+s.value && !certs.some(c => String(c.id) === String(s.value)) ? `<option value="${esc(s.value)}" selected>Certificate ${esc(s.value)} (not found in NPM)</option>` : ''}${certs.map(c => certOpt(c, String(c.id) === String(s.value))).join('')}</select>`;
@@ -259,7 +283,7 @@ function render() {
     <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}${so('title', sortBy, 'Details')}${so('mac', sortBy, 'MAC')}${so('seen', sortBy, 'Last seen')}</select>
       <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Ascending' : '&#9660; Descending'}</button></label>
     ${groupMode !== 'none' ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
-    ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}</div>
+    ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses the providers enabled in Settings. Online providers only receive the first 3 bytes of each MAC, once per vendor prefix">Look up all MAC vendors</button>' : ''}</div>
     <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>${sortHead('name', 'Host')} / ${sortHead('ip', 'IP')} / service</th><th class="det">${sortHead('title', 'Details')}</th><th>${sortHead('mac', 'MAC')}</th><th>${sortHead('seen', 'Last seen')}</th>${extra}</tr></thead><tbody>` +
     tableBody(items) + '</tbody></table>';
 }
@@ -273,7 +297,7 @@ let sortBy = SORTS.includes(lsGet('npmd.sort')) ? lsGet('npmd.sort') : 'ip';
 let sortDir = lsGet('npmd.dir') === 'desc' ? 'desc' : 'asc';
 const dispName = i => i.host_name || i.hostname || '';
 const fshort = t => t ? new Date(t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : '-';
-const macHtml = m => m && m.mac ? `<code>${esc(m.mac)}</code><br>${m.vendor ? esc(m.vendor) : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}`
+const macHtml = m => m && m.mac ? `<code>${esc(m.mac)}</code><br>${m.vendor ? `<span ${m.vendor_source && SOURCES[m.vendor_source] ? `title="Source: ${esc(SOURCES[m.vendor_source])}"` : ''}>${esc(m.vendor)}</span>` : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}`
   : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>';
 const collapsed = new Set((() => { try { return JSON.parse(lsGet('npmd.collapsed') || '[]'); } catch { return []; } })());
 const saveCollapsed = () => lsSet('npmd.collapsed', JSON.stringify([...collapsed]));
@@ -450,7 +474,11 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
   }
   if (a === 'vendor' || a === 'vendorall') {
     b.disabled = true;
-    try { await api(a === 'vendor' ? `/api/discoveries/${id}/vendor` : '/api/vendors/lookup', {method: 'POST'}); await loadData(); }
+    try {
+      const r = await api(a === 'vendor' ? `/api/discoveries/${id}/vendor` : '/api/vendors/lookup', {method: 'POST'});
+      await loadData();
+      if (r.warnings && r.warnings.length) alert('MAC lookup notes:\n' + r.warnings.join('\n'));
+    }
     catch (err) { alert(err.message); b.disabled = false; }
     return;
   }
@@ -472,9 +500,17 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
       if (a === 'ssave') {
         const values = {};
         document.querySelectorAll('.sett [data-k]').forEach(el => values[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value);
+        values.MAC_PROVIDERS = [...document.querySelectorAll('.sett [data-prov]:checked')].map(el => el.dataset.prov).join(',');
         const r = await api('/api/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({values})});
         sdirty = false; await loadSettings(); await loadStatus(); await loadData(); renderSettings();
         msg(r.restart_needed ? 'Saved. Restart the service to apply the web page address/port.' : 'Saved.');
+      } else if (a === 'sieee') {
+        b.disabled = true; msg('Downloading the IEEE list…');
+        try {
+          ieee = await api('/api/macs/ieee/download', {method: 'POST'});
+          const i = $('#ieeeinfo'); if (i) i.textContent = ieeeInfo();
+          msg(`IEEE list downloaded: ${ieee.entries} entries.`);
+        } finally { b.disabled = false; }
       } else if (a === 'stest') {
         msg('Testing…'); const r = await api('/api/npm/test', {method: 'POST'});
         msg(`Connected to NPM (${r.proxy_hosts} proxy hosts). Save first if you changed the fields.`);
