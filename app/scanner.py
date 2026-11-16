@@ -11,6 +11,7 @@ import httpx
 from . import config, db, macs
 
 TLS_FIRST = {443, 8443, 8444, 9443, 4443, 5001, 8006, 8007}
+HOSTNAME_RE = re.compile(r"[A-Za-z0-9_]([A-Za-z0-9_.-]{0,251}[A-Za-z0-9_])?")
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 state = {"running": False, "stop": False, "proc": None, "tasks": []}
 
@@ -110,9 +111,11 @@ async def probe(client, ip, port):
 async def rdns(ip):
     try:
         loop = asyncio.get_running_loop()
-        return (await asyncio.wait_for(loop.run_in_executor(None, socket.gethostbyaddr, ip), 3))[0]
+        name = (await asyncio.wait_for(loop.run_in_executor(None, socket.gethostbyaddr, ip), 3))[0]
     except Exception:
         return ""
+    # PTR records are untrusted: the UI builds an open-in-new-tab link from this, so only plain hostnames pass
+    return name if HOSTNAME_RE.fullmatch(name) else ""
 
 
 async def run_scan():
