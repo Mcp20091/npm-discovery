@@ -15,13 +15,19 @@ TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 state = {"running": False}
 
 
-async def run_nmap():
-    args = ["nmap", "-sT", "-Pn", "-n", "--open", "-T4", "--max-retries", "1", "-oX", "-"]
+def nmap_args():
+    timing = ["-T2", "--max-rate", "20", "--max-parallelism", "5", "--scan-delay", "50ms"] if config.SCAN_GENTLE else ["-T4"]
+    args = ["nmap", "-sT", "-Pn", "-n", "--open", *timing, "--max-retries", "1", "-oX", "-"]
     args += ["-p-"] if config.SCAN_ALL_PORTS else ["-p", ",".join(map(str, config.SCAN_PORTS))]
     excl = config.SCAN_EXCLUDE + [r["value"] for r in db.q("SELECT value FROM exclusions")]
     if excl:
         args += ["--exclude", ",".join(excl)]
     args += config.SCAN_SUBNETS
+    return args
+
+
+async def run_nmap():
+    args = nmap_args()
     try:
         proc = await asyncio.create_subprocess_exec(
             *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -94,7 +100,7 @@ async def run_scan():
         if not config.SCAN_SUBNETS:
             raise RuntimeError("SCAN_SUBNETS is not set")
         open_ports = await run_nmap()
-        sem = asyncio.Semaphore(30)
+        sem = asyncio.Semaphore(3 if config.SCAN_GENTLE else 30)
         names = {}
         async with httpx.AsyncClient(verify=False, timeout=config.PROBE_TIMEOUT,
                                      follow_redirects=False) as client:
