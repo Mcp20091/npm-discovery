@@ -99,6 +99,9 @@ function renderSettings() {
      <h3>Maintenance</h3><div class="line"><button data-a="sreset">Reset all to config.env</button><button data-a="srestart">Restart service</button></div>
      <small class="mut">Settings saved here override config.env. Skipped addresses are on the Exclusions tab.</small></div>`;
 }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'exv') { e.preventDefault(); document.querySelector('button[data-a=addexcl]').click(); }
+});
 document.addEventListener('input', e => { if (e.target.closest('.sett')) sdirty = true; });
 let excl = {items: [], from_config: []}, exclErr = '';
 async function loadExcl() { try { excl = await api('/api/exclusions'); } catch {} }
