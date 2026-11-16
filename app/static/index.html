@@ -386,7 +386,7 @@ function render() {
     ${q || hideGone ? `<span class="shown">${items.length} of ${all.length} shown</span>` : ''}
     ${gone ? `<label class="tb"><input type="checkbox" id="hidegone" ${hideGone ? 'checked' : ''}> Hide gone (${gone})</label><button class="small danger" data-a="forgetgone" title="Remove services that were not found in the last scan from this list. They come back if a later scan finds them.">Forget gone</button>` : ''}
     <span class="vsep"></span>
-    <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('vendor', groupMode, 'By MAC vendor')}${so('none', groupMode, 'No grouping')}</select></label>
+    <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('vendor', groupMode, 'By MAC vendor')}${so('port', groupMode, 'By port')}${so('service', groupMode, 'By service (page title)')}${so('none', groupMode, 'No grouping')}</select></label>
     <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}${so('title', sortBy, 'Details')}${so('mac', sortBy, 'MAC')}${so('seen', sortBy, 'Last seen')}</select>
       <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Asc' : '&#9660; Desc'}</button></label>
     ${groupMode !== 'none' ? '<button data-a="collapseall" class="small ghost">Collapse all</button><button data-a="expandall" class="small ghost">Expand all</button>' : ''}
@@ -403,7 +403,7 @@ const sel = new Set();
 const certOpt = (c, on) => `<option value="${c.id}" title="${esc((c.domains || []).join(', '))}" ${on ? 'selected' : ''}>${esc(c.name)}</option>`;
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'vendor', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
+let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'vendor', 'port', 'service', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
 const SORTS = ['ip', 'name', 'title', 'mac', 'seen'];
 let sortBy = SORTS.includes(lsGet('npmd.sort')) ? lsGet('npmd.sort') : 'ip';
 let sortDir = lsGet('npmd.dir') === 'desc' ? 'desc' : 'asc';
@@ -462,26 +462,43 @@ const sortHead = (k, label) => `<span class="sh" data-sort="${k}" title="Sort by
 // vendor groups: known vendors A-Z, then MACs not looked up yet, then hosts without a MAC
 const NOVEND = ['v:~0', 'v:~1', 'v:~2'];
 const vendorKey = i => isUnknown(i) ? NOVEND[0] : i.vendor ? 'v:' + i.vendor : i.mac ? NOVEND[1] : NOVEND[2];
-function vendorHead(key, list) {
-  const ips = [...new Set(list.map(i => i.ip))], open = !collapsed.has(key);
-  const label = ['Unknown vendor', 'Vendor not looked up yet', 'No MAC address'][NOVEND.indexOf(key)] || key.slice(2);
-  const hint = [' <small class="mut">(no provider knew it; use Retry)</small>', ' <small class="mut">(use Look up MAC vendors)</small>',
-    ' <small class="mut">(hosts on another network segment)</small>'][NOVEND.indexOf(key)] || '';
+const svcTitle = i => (i.title || '').replace(/\s+/g, ' ').trim();
+// groupings whose groups span several hosts: rows keep their own host column, groups get a generic header
+const MULTI = {
+  vendor: {
+    key: vendorKey,
+    label: (k, list) => ['Unknown vendor', 'Vendor not looked up yet', 'No MAC address'][NOVEND.indexOf(k)] || list[0].vendor,
+    hint: k => ['no provider knew it; use Retry', 'use Look up MAC vendors', 'hosts on another network segment'][NOVEND.indexOf(k)] || '',
+    order: (a, b) => (NOVEND.indexOf(a[0]) - NOVEND.indexOf(b[0])) || a[0].localeCompare(b[0], undefined, {sensitivity: 'base'})},
+  port: {
+    key: i => 'p:' + i.port,
+    label: (k, list) => 'Port ' + list[0].port,
+    hint: (k, list) => {  // the page titles seen on this port, most common first
+      const n = new Map(); list.forEach(i => { const t = svcTitle(i); if (t) n.set(t, (n.get(t) || 0) + 1); });
+      const top = [...n.entries()].sort((x, y) => y[1] - x[1]).map(e => e[0]);
+      return top.slice(0, 3).join(', ') + (top.length > 3 ? ', …' : '');
+    },
+    order: (a, b) => a[1][0].port - b[1][0].port},
+  service: {
+    key: i => svcTitle(i) ? 's:' + svcTitle(i).toLowerCase() : 's:~',
+    label: (k, list) => k === 's:~' ? 'No page title' : svcTitle(list[0]),
+    hint: (k, list) => k === 's:~' ? 'the page sent no title' : 'port' + (new Set(list.map(i => i.port)).size > 1 ? 's ' : ' ') + [...new Set(list.map(i => i.port))].sort((x, y) => x - y).join(', '),
+    order: (a, b) => ((a[0] === 's:~') - (b[0] === 's:~')) || a[0].localeCompare(b[0], undefined, {sensitivity: 'base', numeric: true})}};
+function multiHead(g, key, list) {
+  const ips = [...new Set(list.map(i => i.ip))], open = !collapsed.has(key), hint = g.hint(key, list);
   return `<tr class="ghead" data-gh="${esc(key)}"><td><input type="checkbox" class="selg" data-ips="${esc(ips.join(' '))}" ${ips.every(ip => sel.has(ip)) ? 'checked' : ''}></td>
-    <td colspan="5"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button><span class="hn">${esc(label)}</span>${hint}
+    <td colspan="5"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button><span class="hn">${esc(g.label(key, list))}</span>${hint ? ` <small class="mut">(${esc(hint)})</small>` : ''}
       <small class="mut"> &middot; ${ips.length} host${ips.length > 1 ? 's' : ''}, ${list.length} service${list.length > 1 ? 's' : ''}</small></td></tr>`;
 }
 function tableBody(items) {
   const sorted = items.slice().sort(cmpItems);
   if (groupMode === 'none') return sorted.map(i => row(i, false)).join('');
+  const g = MULTI[groupMode];
+  const keyOf = g ? g.key : i => groupMode === 'ip' ? i.ip : 'n:' + (dispName(i) || i.ip).toLowerCase();
   const by = new Map();
-  const keyOf = i => groupMode === 'ip' ? i.ip : groupMode === 'vendor' ? vendorKey(i) : 'n:' + (dispName(i) || i.ip).toLowerCase();
   sorted.forEach(i => { const k = keyOf(i); if (!by.has(k)) by.set(k, []); by.get(k).push(i); });
-  let groups = [...by.entries()];
-  if (groupMode === 'vendor') {  // a vendor group holds many hosts, so its rows keep their own host column
-    groups.sort(([a], [b]) => (NOVEND.indexOf(a) - NOVEND.indexOf(b)) || a.localeCompare(b, undefined, {sensitivity: 'base'}));
-    return groups.map(([k, list]) => vendorHead(k, list) + list.map(i => row(i, false, k)).join('')).join('');
-  }
+  const groups = [...by.entries()];
+  if (g) return groups.sort(g.order).map(([k, list]) => multiHead(g, k, list) + list.map(i => row(i, false, k)).join('')).join('');
   return groups.map(([k, list]) => groupHead(k, list) + list.map(i => row(i, true, k)).join('')).join('');
 }
 function setCollapsed(ip, c) {  // toggles hidden on the rows, no re-render, so typed subdomains survive

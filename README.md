@@ -81,7 +81,7 @@ unreachable, API errors) appear as red banners, and Add errors show under the ro
 - Services first found by the latest scan are marked **NEW**; ones it did not see are **GONE** and can be
   hidden, or removed with **Forget** / **Forget gone** (they come back if a later scan finds them).
 - Ticking hosts opens a bar to dismiss, restore or exclude them in one go.
-- Group by IP, host name, or MAC vendor (known vendors A-Z, then MACs not looked up yet, then hosts without a MAC).
+- Group by IP, host name, MAC vendor, port (with the page titles seen on it) or service (page title, with its ports).
 - A subdomain that NPM already uses is flagged while you type and refused on Add.
 - On **Already proxied**, the proxy host domains are links. The open tab is kept in the URL (`#history`, ...).
 
