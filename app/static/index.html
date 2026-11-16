@@ -44,6 +44,7 @@ code{font-size:12px}
 .sett .line{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
 .ok{color:var(--ok)}
 small.mut{color:var(--mut)}
+#logout{color:var(--mut);font-size:13px}
 .sett #smsg{min-height:1.4em}
 </style>
 </head>
@@ -54,6 +55,7 @@ small.mut{color:var(--mut)}
   <span id="st" class="pill"></span>
   <button id="stop" hidden>Stop scan</button>
   <button id="scan" class="primary">Scan now</button>
+  <a href="#" id="logout" hidden>Log out</a>
 </header>
 <main>
   <div id="banners"></div>
@@ -98,6 +100,11 @@ function renderSettings() {
   $('#content').innerHTML = `<div class="sett">` + FIELDS.map(([g, fs]) => `<h3>${g}</h3>${fs.map(field).join('')}`).join('') +
     `<div class="line"><button class="primary" data-a="ssave">Save</button><button data-a="stest">Test NPM connection</button></div>
      <div class="${smsg.bad ? 'err' : 'ok'}" id="smsg">${esc(smsg.text)}</div>
+     <h3>Web page password</h3>
+     <label class="sf"><span class="sl">${status.auth ? 'Change password' : 'Set a password'}<small> · ${status.auth ? 'enabled' : 'off - anyone on the network can open this page'}</small></span>
+       <input type="password" id="pw" autocomplete="new-password" placeholder="New password (at least 8 characters)">
+       <small class="mut">Sent unencrypted unless you put this page behind HTTPS. Removing the password needs a logged-in session.</small></label>
+     <div class="line"><button data-a="spw">${status.auth ? 'Change password' : 'Set password'}</button>${status.auth ? '<button data-a="spwoff">Remove password</button>' : ''}</div>
      <h3>Maintenance</h3><div class="line"><button data-a="sreset">Reset all to config.env</button><button data-a="srestart">Restart service</button></div>
      <small class="mut">Settings saved here override config.env. Skipped addresses are on the Exclusions tab.</small></div>`;
 }
@@ -120,6 +127,7 @@ const fmt = t => t ? new Date(t*1000).toLocaleString() : '-';
 async function api(path, opts) {
   const r = await fetch(path, opts);
   let j = {}; try { j = await r.json(); } catch {}
+  if (r.status === 401 && !path.startsWith('/api/login')) { location.reload(); throw new Error('Login required'); }
   if (!r.ok) throw new Error(j.detail || j.error || ('HTTP ' + r.status));
   return j;
 }
@@ -132,6 +140,7 @@ async function loadStatus() {
   $('#last').textContent = l ? 'Last scan: ' + fmt(l.finished || l.started) + (l.status === 'finished' ? ` (${l.found} services)` : '') : 'No scan yet';
   $('#scan').disabled = status.running;
   $('#stop').hidden = !status.running;
+  $('#logout').hidden = !status.auth;
   renderBanners();
 }
 
@@ -202,6 +211,13 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
       } else if (a === 'sreset') {
         if (!confirm('Discard everything saved in the web page and go back to config.env?')) return;
         await api('/api/settings', {method: 'DELETE'}); sdirty = false; await loadSettings(); await loadStatus(); await loadData(); renderSettings(); msg('Reset.');
+      } else if (a === 'spw') {
+        const pw = $('#pw').value; if (!pw) { msg('Enter a new password first.', true); return; }
+        await api('/api/password', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({password: pw})});
+        await loadStatus(); renderSettings(); msg('Password saved. You stay logged in; other sessions were signed out.');
+      } else if (a === 'spwoff') {
+        if (!confirm('Remove the password? Anyone on the network will be able to open this page.')) return;
+        await api('/api/password', {method: 'DELETE'}); await loadStatus(); renderSettings(); msg('Password removed.');
       } else if (a === 'srestart') {
         if (!confirm('Restart the service now?')) return;
         await api('/api/restart', {method: 'POST'}); msg('Restarting… reload this page in a few seconds.');
@@ -244,6 +260,7 @@ $('#stop').onclick = async () => {
   loadStatus();
 };
 
+$('#logout').onclick = async e => { e.preventDefault(); try { await fetch('/api/logout', {method: 'POST'}); } catch {} location.reload(); };
 $('#scan').onclick = async () => {
   await loadStatus();
   const subs = status.subnets || [], n = status.exclusion_count || 0;

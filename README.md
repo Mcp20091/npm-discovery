@@ -73,7 +73,28 @@ Open `http://<container-ip>:8080`. The header shows the last scan time and statu
 (running / finished / failed); **Scan now** starts a scan on demand. Errors from NPM (login failure,
 unreachable, API errors) appear as red banners, and Add errors show under the row.
 
-The web UI has no login. Keep it on your LAN and do not expose it to the internet.
+## Web page password (optional)
+
+By default the web page has no login. To protect it, open **Settings > Web page password**, type a
+password (8+ characters) and click **Set password**. From then on every page and API call needs a login
+(session cookie, valid 12 hours, HttpOnly + SameSite=Strict; a service restart signs everyone out) and a
+**Log out** link appears in the header. After 5 wrong attempts from one IP within 5 minutes that IP is
+locked out for 5 minutes. Only a salted scrypt hash is stored, never the password. **Remove password**
+on the same tab turns it off again (you must be logged in). "Reset all to config.env" keeps the password.
+
+Without HTTPS the password travels in clear text on your LAN, so this keeps out casual visitors but not
+someone sniffing the network. Put the page behind NPM with an SSL certificate for real protection. The
+lockout is per client IP as seen by the service, so behind a reverse proxy all users share one address.
+
+**Forgot the password?** Stop the service, delete the stored hash, start it again:
+
+```bash
+systemctl stop npm-discovery
+sqlite3 /var/lib/npm-discovery/discovery.db "DELETE FROM settings WHERE key='_auth_hash';"
+systemctl start npm-discovery
+```
+
+Do not expose the web UI to the internet even with a password.
 
 ## Logs and service control
 

@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import config, db, scanner
+from . import auth, config, db, scanner
 from .npm import NpmClient, NpmError
 
 log = logging.getLogger("npm-discovery")
@@ -73,6 +73,8 @@ async def lifespan(app):
 
 
 app = FastAPI(title="NPM Discovery", lifespan=lifespan)
+app.middleware("http")(auth.middleware)
+app.include_router(auth.router)
 
 
 def suggest(row):
@@ -112,7 +114,8 @@ async def status():
             "base_domain": config.BASE_DOMAIN, "config_problems": config.problems(),
             "interval_hours": config.SCAN_INTERVAL_HOURS,
             "subnets": config.SCAN_SUBNETS,
-            "exclusion_count": len(config.SCAN_EXCLUDE) + db.q("SELECT COUNT(*) AS n FROM exclusions")[0]["n"]}
+            "exclusion_count": len(config.SCAN_EXCLUDE) + db.q("SELECT COUNT(*) AS n FROM exclusions")[0]["n"],
+            "auth": auth.enabled()}
 
 
 @app.post("/api/scan")
@@ -225,7 +228,7 @@ async def put_settings(req: SettingsReq):
 @app.delete("/api/settings")
 async def reset_settings():
     global npm
-    db.x("DELETE FROM settings")
+    db.x("DELETE FROM settings WHERE key NOT LIKE '!_auth!_%' ESCAPE '!'")  # keep the web password
     load_settings()
     npm = NpmClient()
     _cache.update(hosts=None, error=None, at=0.0)
