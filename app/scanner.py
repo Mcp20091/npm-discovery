@@ -16,7 +16,8 @@ TLS_FIRST = {443, 8443, 8444, 9443, 4443, 5001, 8006, 8007}
 HOSTNAME_RE = re.compile(r"[A-Za-z0-9_]([A-Za-z0-9_.-]{0,251}[A-Za-z0-9_])?")
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 LOG_MAX = 400  # lines stored per scan
-state = {"running": False, "stop": False, "proc": None, "tasks": [], "targets": None}
+state = {"running": False, "stop": False, "proc": None, "tasks": [], "targets": None,
+         "phase": "", "done": 0, "total": 0, "started": 0.0}  # phase/done/total feed the progress shown in the UI
 
 
 def make_logger(scan_id):
@@ -178,9 +179,10 @@ async def run_scan(only=None):
     """Returns False if a scan was already running. `only` = hand-typed targets instead of the saved subnets."""
     if state["running"]:
         return False
-    state.update(running=True, stop=False, proc=None, tasks=[], targets=only)
-    state.pop("nmap_info", None)
     started = time.time()
+    state.update(running=True, stop=False, proc=None, tasks=[], targets=only,
+                 phase="port scan", done=0, total=0, started=started)
+    state.pop("nmap_info", None)
     scan_id = db.x("INSERT INTO scans(started,status) VALUES(?, 'running')", (started,)).lastrowid
     L = make_logger(scan_id)
     try:
@@ -208,13 +210,17 @@ async def run_scan(only=None):
         # entry), and merge.
         arp = macs.read_arp()
         fails = {}
+        state.update(phase="web probe", done=0, total=len(open_ports))
         sem = asyncio.Semaphore(3 if config.SCAN_GENTLE else 30)
         names = {}
         async with httpx.AsyncClient(verify=False, timeout=config.PROBE_TIMEOUT,
                                      follow_redirects=False) as client:
             async def one(ip, port):
                 async with sem:
-                    info = await probe(client, ip, port, fails)
+                    try:
+                        info = await probe(client, ip, port, fails)
+                    finally:
+                        state["done"] += 1
                     if not info:
                         return None
                     arp.update(macs.read_arp())
@@ -263,5 +269,5 @@ async def run_scan(only=None):
         db.x("UPDATE scans SET status='failed', finished=?, error=? WHERE id=?",
              (time.time(), str(e), scan_id))
     finally:
-        state.update(running=False, stop=False, proc=None, tasks=[], targets=None)
+        state.update(running=False, stop=False, proc=None, tasks=[], targets=None, phase="", done=0, total=0)
     return True

@@ -100,8 +100,18 @@ def match_proxy(row, hosts):
     out = []
     for h in hosts or []:
         if int(h.get("forward_port", 0)) == row["port"] and str(h.get("forward_host", "")).lower() in names:
-            out.append(", ".join(h.get("domain_names", [])))
+            out.append(h)
     return out
+
+
+def proxy_links(h):
+    """Clickable addresses of an NPM proxy host (https when it has a certificate)."""
+    scheme = "https" if h.get("certificate_id") else "http"
+    return [{"domain": d, "url": f"{scheme}://{d}/"} for d in h.get("domain_names", []) if "*" not in d]
+
+
+def taken_domains():
+    return sorted({d.lower() for h in _cache["hosts"] or [] for d in h.get("domain_names", [])})
 
 
 @app.get("/")
@@ -117,7 +127,9 @@ async def status():
             "interval_hours": config.SCAN_INTERVAL_HOURS,
             "subnets": config.SCAN_SUBNETS,
             "exclusion_count": len(config.SCAN_EXCLUDE) + db.q("SELECT COUNT(*) AS n FROM exclusions")[0]["n"],
-            "auth": auth.enabled()}
+            "auth": auth.enabled(),
+            "progress": {k: scanner.state[k] for k in ("phase", "done", "total", "started")}
+            if scanner.state["running"] else None}
 
 
 class ScanReq(BaseModel):
@@ -158,13 +170,16 @@ async def discoveries():
             continue
         proxies = match_proxy(r, _cache["hosts"])
         r["state"] = "dismissed" if r["dismissed"] else ("proxied" if proxies else "new")
-        r["proxy_domains"] = proxies
+        r["proxy_domains"] = [", ".join(h.get("domain_names", [])) for h in proxies]
+        r["proxy_links"] = [link for h in proxies for link in proxy_links(h)]
         r["suggestion"] = suggest(r)
         r["host_name"] = names.get(r["ip"], "")
         r["note"] = notes.get(("service", f"{r['ip']}:{r['port']}"), "")
         r["host_note"] = notes.get(("host", r["ip"]), "")
         items.append(r)
-    return {"items": items, "npm_error": _cache["error"]}
+    last = db.q("SELECT started FROM scans WHERE status='finished' ORDER BY id DESC LIMIT 1")
+    return {"items": items, "npm_error": _cache["error"], "taken": taken_domains(),
+            "last_scan_started": last[0]["started"] if last else None}
 
 
 NOTE_MAX = 2000
@@ -261,6 +276,14 @@ async def dismiss(rid: int):
 async def restore(rid: int):
     _row(rid)
     db.x("UPDATE discoveries SET dismissed=0 WHERE id=?", (rid,))
+    return {"ok": True}
+
+
+@app.delete("/api/discoveries/{rid}")
+async def forget(rid: int):
+    """Drop a discovery (meant for GONE ones). If a later scan finds it again it comes back as new."""
+    _row(rid)
+    db.x("DELETE FROM discoveries WHERE id=?", (rid,))
     return {"ok": True}
 
 
@@ -389,6 +412,9 @@ async def add(rid: int, req: AddReq):
     if not sub or not all(LABEL_RE.match(p) for p in sub.split(".")):
         raise HTTPException(400, "Subdomain may only contain letters, digits and hyphens (dots allowed between labels)")
     domain = f"{sub}.{config.BASE_DOMAIN}"
+    await refresh_hosts()
+    if domain.lower() in taken_domains():
+        raise HTTPException(409, f"{domain} is already used by a proxy host in NPM - pick another subdomain")
     cert = req.certificate_id or 0
     if cert:  # a saved default may point at a certificate that was deleted in NPM since
         try:

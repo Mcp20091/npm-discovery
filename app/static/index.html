@@ -5,98 +5,133 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NPM Discovery</title>
 <style>
-:root{--bg:#f5f6f8;--card:#fff;--fg:#1c2330;--mut:#6b7585;--line:#e2e5ea;--acc:#2563eb;--bad:#c62828;--ok:#2e7d32;--warn:#b26a00}
-@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--fg:#e6e9ef;--mut:#8b95a5;--line:#2b3340;--acc:#5b8def;--bad:#ef6b6b;--ok:#5fc16a;--warn:#e0a040}}
+:root{--bg:#f5f6f8;--card:#fff;--fg:#1c2330;--mut:#6b7585;--line:#e2e5ea;--acc:#2563eb;--bad:#c62828;--ok:#2e7d32;--warn:#b26a00;--hov:rgba(37,99,235,.05);--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--fg:#e6e9ef;--mut:#8b95a5;--line:#2b3340;--acc:#5b8def;--bad:#ef6b6b;--ok:#5fc16a;--warn:#e0a040;--hov:rgba(91,141,239,.07);--shadow:0 1px 3px rgba(0,0,0,.4)}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0;margin-right:auto}
-.pill{padding:2px 10px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
-.running,.stopped{color:var(--warn)}.finished{color:var(--ok)}.failed{color:var(--bad)}
-button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
-button:disabled{opacity:.5;cursor:default}
-main{padding:16px 20px;max-width:1400px;margin:auto}
-.tabs{display:flex;gap:4px;margin-bottom:12px}
-.tab{padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid transparent}
-.tab.active{background:var(--card);border-color:var(--line);font-weight:600}
-.banner{padding:10px 14px;border-radius:6px;margin-bottom:12px;background:color-mix(in srgb,var(--bad) 15%,var(--card));border:1px solid var(--bad)}
-.banner.info{background:var(--card);border-color:var(--line)}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px}
-th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:12px;color:var(--mut);font-weight:600;white-space:nowrap}
-td.mut{color:var(--mut);font-size:12px}
-.act{display:flex;flex-direction:column;gap:6px;width:300px;max-width:100%}
-td{word-break:break-word}
-main{overflow-x:auto}
-.act .line{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.act input[type=text]{flex:1;min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
-.act select{max-width:100%;padding:5px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line)}
-.act label{font-size:12px;color:var(--mut);white-space:nowrap}
-.gone{color:var(--bad);font-weight:600;font-size:12px}
-.err{color:var(--bad);font-size:12px}
-.empty{padding:30px;text-align:center;color:var(--mut)}
-code{font-size:12px}
-button.small{padding:3px 10px;font-size:13px}
-#scandlg{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:18px;width:min(560px,92vw)}
-#scandlg::backdrop{background:rgba(0,0,0,.5)}
-#scandlg input[type=text]{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;margin-bottom:6px}
-/* roomier text, tighter table */
-.nm{font-size:13px;color:var(--mut)}
-.slog{font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;padding:6px 4px}
-.l-warn{color:var(--warn)}.l-error{color:var(--bad)}
-.sh{cursor:pointer;user-select:none}
-.sh:hover{color:var(--fg);text-decoration:underline}
-body{font-size:15px}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
 a{color:var(--acc)}
-main{max-width:1800px}
-table{width:auto;max-width:100%}
+code{font-size:12px;white-space:nowrap}
+.mut,small.mut,td.mut{color:var(--mut)}
+td.mut{font-size:12px}
+.ok{color:var(--ok)}
+.err{color:var(--bad);font-size:13px}
+.warnt{color:var(--warn);font-size:13px}
+/* header */
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);box-shadow:var(--shadow)}
+h1{font-size:18px;margin:0;margin-right:auto;display:flex;align-items:center;gap:8px}
+h1 .logo{width:24px;height:24px;border-radius:6px;background:var(--acc);display:inline-grid;place-items:center;color:#fff}
+#last{font-size:13px}
+.pill{padding:2px 10px;border-radius:99px;font-size:12px;border:1px solid var(--line);white-space:nowrap}
+.running,.stopped{color:var(--warn)}.finished{color:var(--ok)}.failed{color:var(--bad)}
+#prog{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}
+#prog .bar{width:120px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+#prog .bar i{display:block;height:100%;background:var(--acc);transition:width .4s}
+#prog .bar.ind i{width:35%!important;animation:ind 1.2s ease-in-out infinite}
+@keyframes ind{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+#logout{color:var(--mut);font-size:13px}
+/* controls */
+button{font:inherit;font-size:14px;padding:6px 13px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;transition:background .12s,border-color .12s}
+button:hover:not(:disabled){border-color:var(--mut)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--acc)}
+button.danger{color:var(--bad)}
+button.ghost{background:transparent;border-color:transparent;color:var(--mut)}
+button.ghost:hover:not(:disabled){color:var(--fg);border-color:var(--line);background:var(--card)}
+button:disabled{opacity:.5;cursor:default}
+button.small{padding:3px 10px;font-size:13px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+input[type=text],input[type=password],input[type=number],input[type=search],textarea,select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+select{max-width:280px;text-overflow:ellipsis}
+main{padding:16px 20px;max-width:1800px;margin:auto;overflow-x:auto}
+/* tabs */
+.tabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.tab{padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--mut);display:flex;align-items:center;gap:6px;user-select:none}
+.tab:hover{color:var(--fg)}
+.tab.active{color:var(--fg);border-bottom-color:var(--acc);font-weight:600}
+.tab .cnt{font-size:12px;font-weight:600;padding:0 7px;border-radius:99px;background:var(--line);color:var(--fg);line-height:18px}
+.tab.active .cnt{background:var(--acc);color:#fff}
+.banner{padding:10px 14px;border-radius:6px;margin-bottom:12px;background:color-mix(in srgb,var(--bad) 15%,var(--card));border:1px solid var(--bad)}
+.banner.info{background:var(--card);border-color:var(--line);color:var(--mut);font-size:14px}
+/* toolbar */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-bottom:12px}
+.search{position:relative;display:flex;align-items:center}
+.search input{width:290px;padding-left:28px;padding-right:26px}
+.search svg{position:absolute;left:8px;color:var(--mut);pointer-events:none}
+.search kbd{position:absolute;right:7px;font:11px ui-monospace,Consolas,monospace;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:0 4px;pointer-events:none}
+.search input:focus~kbd,.search input:not(:placeholder-shown)~kbd{display:none}
+.tb{display:flex;align-items:center;gap:6px;font-size:14px}
+.shown{font-size:13px;color:var(--mut)}
+#selbar{padding:8px 12px;border-radius:8px;background:color-mix(in srgb,var(--acc) 10%,var(--card));border:1px solid color-mix(in srgb,var(--acc) 35%,var(--line))}
+.vsep{width:1px;align-self:stretch;background:var(--line);margin:2px 2px}
+/* table */
+table{width:auto;max-width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow)}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;word-break:break-word}
+tbody tr:last-child td{border-bottom:0}
+th{font-size:13px;color:var(--mut);font-weight:600;white-space:nowrap}
+tbody tr.svc:hover td,tbody tr.flat:hover td{background:var(--hov)}
 td.dtc{max-width:340px}
 thead th:nth-child(2){min-width:250px}
+thead th:nth-child(3){min-width:170px}
 thead th:nth-child(4){min-width:170px}
-thead th:nth-child(5){min-width:130px}
-code{white-space:nowrap}
-th{font-size:13px}
-th,td{padding:9px 12px}
-button{font-size:14px;padding:6px 13px}
-.act{width:520px}
-.act .line{gap:8px;align-items:center}
-.act input[type=text]{min-width:130px}
-select{padding:5px 8px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);font:inherit;max-width:280px;text-overflow:ellipsis}
-.act select{max-width:210px}
-.act label{font-size:14px;color:var(--fg)}
-.badge{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--mut);margin-right:8px;vertical-align:1px}
-.dt{font-weight:600}
-.tb{display:flex;align-items:center;gap:6px}
-.tb select{padding:5px 8px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);font:inherit}
-.sett{max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px 18px}
-.sett h3{margin:18px 0 6px;font-size:14px}
-.sf{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
-.sl{font-weight:600}.sl small{font-weight:400;color:var(--mut)}
-.sett input[type=text],.sett input[type=password],.sett input[type=number],.sett textarea{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;width:100%}
-.sett input[type=checkbox]{align-self:flex-start}
-.sett .line{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
-.ok{color:var(--ok)}
-small.mut{color:var(--mut)}
-#logout{color:var(--mut);font-size:13px}
-.sett #smsg{min-height:1.4em}
-tr.ghead td{background:color-mix(in srgb,var(--acc) 7%,var(--card));border-top:2px solid var(--line);vertical-align:middle}
+thead th:nth-child(5){min-width:110px}
+tr.ghead td{background:color-mix(in srgb,var(--acc) 7%,var(--card));vertical-align:middle}
+.sh{cursor:pointer;user-select:none}
+.sh:hover{color:var(--fg);text-decoration:underline}
 button.caret{padding:0 6px;font-size:12px;margin-right:6px;line-height:20px}
 .ipc{font-size:12px;color:var(--mut);font-family:ui-monospace,Consolas,monospace}
 .hn{font-weight:600}
-.note{font-size:13px;color:var(--mut);white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden;margin-top:3px;font-weight:400}
-dialog#notedlg{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:16px 18px;width:min(520px,92vw)}
-dialog#notedlg::backdrop{background:rgba(0,0,0,.5)}
-#notedlg h3{margin:0 0 4px;font-size:16px}
-#notedlg textarea{width:100%;box-sizing:border-box;min-height:140px;resize:vertical;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
-#notedlg .btns{display:flex;gap:8px;margin-top:10px;align-items:center}
-#notedlg .btns .sp{flex:1}
+.nm{font-size:13px;color:var(--mut)}
+.dt{font-weight:600}
+.badge{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--mut);margin-right:8px;vertical-align:1px}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:0 6px;border-radius:4px;margin-left:6px;vertical-align:1px}
+.chip.gone{color:var(--bad);background:color-mix(in srgb,var(--bad) 13%,transparent)}
+.chip.fresh{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent)}
+.note{font-size:13px;color:var(--mut);white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden;margin-top:3px;font-weight:400;border-left:2px solid var(--line);padding-left:7px}
+.empty{padding:40px 20px;text-align:center;color:var(--mut);background:var(--card);border:1px dashed var(--line);border-radius:8px}
+.empty b{display:block;color:var(--fg);font-size:16px;margin-bottom:4px}
+/* add form in a row */
+.act{display:flex;flex-direction:column;gap:6px;width:520px;max-width:100%}
+.act .line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.act input[type=text]{flex:1;min-width:130px;padding:5px 7px}
+.act input.taken{border-color:var(--warn)}
+.act select{max-width:210px;padding:5px 8px}
+.act label{font-size:14px;white-space:nowrap}
+.plinks a{display:inline-block;margin-right:10px}
+/* settings */
+.sett{max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px 18px;box-shadow:var(--shadow)}
+.sett h3{margin:22px 0 8px;font-size:14px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.sf{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}
+.sl{font-weight:600}.sl small{font-weight:400;color:var(--mut)}
+.sett input[type=text],.sett input[type=password],.sett input[type=number],.sett textarea{width:100%}
+.sett input[type=checkbox]{align-self:flex-start}
+.sett .line{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}
+.sett #smsg{min-height:1.4em}
+/* history log */
+.slog{font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;padding:6px 4px}
+.l-warn{color:var(--warn)}.l-error{color:var(--bad)}
+/* dialogs */
+dialog{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:18px;width:min(540px,92vw);box-shadow:0 10px 40px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h3{margin:0 0 6px;font-size:16px}
+dialog input[type=text]{width:100%;padding:8px;margin-bottom:6px}
+dialog textarea{width:100%;min-height:140px;resize:vertical;padding:7px 9px}
+dialog .btns{display:flex;gap:8px;margin-top:10px;align-items:center}
+dialog .btns .sp{flex:1}
+/* toasts */
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:20;max-width:min(440px,calc(100vw - 32px))}
+.toast{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:8px;padding:10px 8px 10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.18);font-size:14px;white-space:pre-wrap;display:flex;gap:10px;align-items:flex-start;animation:tin .18s ease-out}
+.toast.bad{border-left-color:var(--bad)}.toast.warn{border-left-color:var(--warn)}
+.toast .x{margin-left:auto;padding:0 6px;border:0;background:transparent;color:var(--mut)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}}
+@media(max-width:700px){header{padding:10px 16px}main{padding:12px 16px}.search,.search input{width:100%}.search{flex:1 1 100%}#last{display:none}}
 </style>
 </head>
 <body>
 <header>
-  <h1>NPM Discovery</h1>
+  <h1><span class="logo" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></span>NPM Discovery</h1>
   <span id="last" class="mut"></span>
+  <span id="prog" hidden><span id="progt"></span><span class="bar"><i></i></span></span>
   <span id="st" class="pill"></span>
   <button id="stop" hidden>Stop scan</button>
   <button id="scan1" title="Scan one IP, a range, or a comma separated list">Scan IP / range&hellip;</button>
@@ -110,14 +145,25 @@ dialog#notedlg::backdrop{background:rgba(0,0,0,.5)}
 </main>
 <dialog id="scandlg">
   <form method="dialog" id="scanform">
-    <h3 style="margin:0 0 6px">Scan specific addresses</h3>
+    <h3>Scan specific addresses</h3>
     <p class="mut" style="margin:0 0 8px">One IP, a range, a subnet, or a comma separated list. Excluded addresses are still skipped.</p>
     <input type="text" id="scant" placeholder="192.168.1.50, 192.168.1.60-70, 192.168.2.0/28" autocomplete="off">
     <small class="mut">Examples: 192.168.1.50 &middot; 192.168.1.60-70 &middot; 192.168.1.10-192.168.1.40 &middot; 192.168.2.0/28</small>
     <div class="err" id="scane"></div>
-    <div class="line" style="margin-top:10px;display:flex;gap:8px"><button class="primary" value="go">Scan</button><button value="cancel" formnovalidate>Cancel</button></div>
+    <div class="btns"><button class="primary" value="go">Scan</button><button value="cancel" formnovalidate>Cancel</button></div>
   </form>
 </dialog>
+<dialog id="namedlg">
+  <form method="dialog" id="nameform">
+    <h3>Host name</h3>
+    <div class="mut" id="nm-sub" style="font-size:13px;margin-bottom:8px"></div>
+    <input type="text" id="nm-text" maxlength="100" placeholder="e.g. docker-host, living room TV" autocomplete="off">
+    <small class="mut">Shown instead of the reverse-DNS name. Leave blank to remove it.</small>
+    <div class="err" id="nm-err"></div>
+    <div class="btns"><button class="primary" value="go">Save</button><button value="cancel" formnovalidate>Cancel</button></div>
+  </form>
+</dialog>
+<div id="toasts" aria-live="polite"></div>
 <dialog id="notedlg">
   <h3 id="nd-title">Note</h3>
   <div class="mut" id="nd-sub" style="font-size:13px;margin-bottom:8px"></div>
@@ -128,13 +174,36 @@ dialog#notedlg::backdrop{background:rgba(0,0,0,.5)}
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let tab = 'new', data = {items: [], npm_error: null}, certs = [], status = {}, rowErr = {};
 const TABS = [['new','New'],['proxied','Already proxied'],['dismissed','Dismissed'],['exclusions','Exclusions'],['history','History'],['settings','Settings']];
+let tab = TABS.some(([k]) => k === location.hash.slice(1)) ? location.hash.slice(1) : 'new';  // the tab survives a reload
+let data = {items: [], npm_error: null, taken: []}, certs = [], status = {}, rowErr = {};
+let query = '', hideGone = false;
 let hist = [];
+// small notifications instead of alert(); kind: ok | bad | warn. html is trusted markup built by this page.
+function toast(text, kind = 'ok', html = '') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.setAttribute('role', kind === 'bad' ? 'alert' : 'status');
+  t.innerHTML = `<div>${esc(text)}${html}</div><button class="x" title="Close" aria-label="Close">&times;</button>`;
+  t.querySelector('.x').onclick = () => t.remove();
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), kind === 'bad' ? 12000 : 6000);
+}
+const rel = t => {  // "5 min ago"
+  if (!t) return '-';
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  if (s < 86400 * 30) return Math.floor(s / 86400) + ' d ago';
+  return new Date(t * 1000).toLocaleDateString();
+};
+const isFresh = i => !!(data.last_scan_started && i.first_seen >= data.last_scan_started && !i.missing);
+const matches = (i, q) => !q || [i.ip, `${i.ip}:${i.port}`, i.hostname, i.host_name, i.title, i.server, i.mac, i.vendor, i.note, i.host_note, i.scheme,
+  ...(i.proxy_domains || [])].some(v => v && String(v).toLowerCase().includes(q));
 async function loadHistory() { try { hist = (await api('/api/history')).items; } catch {} }
 function dur(s) { if (!s.finished) return '-'; const t = Math.round(s.finished - s.started); return t >= 60 ? `${Math.floor(t / 60)}m ${t % 60}s` : `${t}s`; }
 function renderHistory() {
-  if (!hist.length) { $('#content').innerHTML = '<div class="empty">No scans yet.</div>'; return; }
+  if (!hist.length) { $('#content').innerHTML = '<div class="empty"><b>No scans yet</b>Click Scan now to run the first one.</div>'; return; }
   $('#content').innerHTML = `<div class="banner info">The last 100 scans. Services lists what a scan found; Log shows how the scan ran: the nmap command, warnings, and any ports that did not answer (possible firewall or security-software blocks).</div>
     <table><thead><tr><th>Started</th><th>Took</th><th>Status</th><th>Found</th><th>New</th><th>Gone</th><th></th></tr></thead><tbody>` +
     hist.map(s => `<tr><td>${fmt(s.started)}</td><td>${dur(s)}</td><td class="${esc(s.status)}">${esc(s.status)}${s.error ? `<br><span class="err">${esc(s.error)}</span>` : ''}</td>
@@ -223,11 +292,11 @@ let excl = {items: [], from_config: []}, exclErr = '';
 async function loadExcl() { try { excl = await api('/api/exclusions'); } catch {} }
 function renderExcl() {
   const rows = excl.from_config.map(v => `<tr><td>${esc(v)}</td><td class="mut">from config.env</td><td></td></tr>`).concat(
-    excl.items.map(x => `<tr><td>${esc(x.value)}</td><td class="mut">added here</td><td><button data-a="rmexcl" data-id="${x.id}">Remove</button></td></tr>`));
+    excl.items.map(x => `<tr><td>${esc(x.value)}</td><td class="mut">added here${x.added ? ' · ' + esc(rel(x.added)) : ''}</td><td><button class="small" data-a="rmexcl" data-id="${x.id}">Remove</button></td></tr>`));
   $('#content').innerHTML = `<div class="banner info">These addresses are skipped by every scan. Use it for your router, PC or anything that objects to port scans. Takes effect on the next scan.</div>
     <div class="act" style="flex-direction:row;margin-bottom:12px;width:auto"><input type="text" id="exv" placeholder="192.168.1.5   192.168.1.50-60   192.168.1.128/28" style="max-width:380px">
     <button class="primary" data-a="addexcl">Add</button></div><div class="err" style="margin-bottom:8px">${esc(exclErr)}</div>` +
-    (rows.length ? `<table><thead><tr><th>Skipped address</th><th>Source</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">No exclusions.</div>');
+    (rows.length ? `<table><thead><tr><th>Skipped address</th><th>Source</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty"><b>No exclusions</b>Every address in your subnets is scanned.</div>');
 }
 
 const fmt = t => t ? new Date(t*1000).toLocaleString() : '-';
@@ -244,7 +313,17 @@ async function loadStatus() {
   const l = status.last;
   const s = status.running ? 'running' : (l ? l.status : 'never run');
   $('#st').className = 'pill ' + s; $('#st').textContent = 'Scan: ' + s;
-  $('#last').textContent = l ? 'Last scan: ' + fmt(l.finished || l.started) + (l.status === 'finished' ? ` (${l.found} services)` : '') : 'No scan yet';
+  $('#last').textContent = l ? 'Last scan: ' + rel(l.finished || l.started) + (l.status === 'finished' ? ` · ${l.found} services` : '') : 'No scan yet';
+  $('#last').title = l ? fmt(l.finished || l.started) : '';
+  const p = status.progress;
+  $('#prog').hidden = !p; $('#last').hidden = !!p;
+  if (p) {
+    const secs = Math.round(Date.now() / 1000 - p.started), el = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+    const probing = p.phase === 'web probe' && p.total;
+    $('#progt').textContent = (probing ? `Checking web pages ${p.done}/${p.total}` : 'Scanning ports…') + ' · ' + el;
+    $('#prog .bar').classList.toggle('ind', !probing);
+    $('#prog .bar i').style.width = probing ? Math.round(100 * p.done / p.total) + '%' : '';
+  }
   $('#scan').disabled = status.running; $('#scan1').disabled = status.running;
   $('#stop').hidden = !status.running;
   $('#logout').hidden = !status.auth;
@@ -267,36 +346,56 @@ async function loadCerts() {
   try { certs = (await api('/api/certificates')).items; } catch { certs = []; }
 }
 
+const EMPTY = {
+  new: ['Nothing new', 'Every web service found so far is already proxied or dismissed. Run a scan to look again.'],
+  proxied: ['Nothing proxied yet', 'Services that already have a proxy host in NPM show up here.'],
+  dismissed: ['Nothing dismissed', 'Services you dismiss on the New tab are kept here and can be restored.']};
 function render() {
   const count = k => k === 'exclusions' ? excl.items.length + excl.from_config.length : data.items.filter(i => i.state === k).length;
-  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}">${n}${k === 'settings' || k === 'history' ? '' : ` (${count(k)})`}</div>`).join('');
+  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}" role="tab" tabindex="0" aria-selected="${k === tab}">${n}${k === 'settings' || k === 'history' ? '' : ` <span class="cnt">${count(k)}</span>`}</div>`).join('');
   if (tab === 'settings') { if (!sdirty) renderSettings(); return; }
   if (tab === 'exclusions') { renderExcl(); return; }
   if (tab === 'history') { renderHistory(); return; }
-  const items = data.items.filter(i => i.state === tab);
-  if (!items.length) { $('#content').innerHTML = `<div class="empty">Nothing here.</div>`; return; }
-  const extra = tab === 'proxied' ? '<th>Proxy host</th>' : '<th>Action</th>';
-  const allOn = items.every(i => sel.has(i.ip));
+  const all = data.items.filter(i => i.state === tab);
+  if (!all.length) {
+    const [h, t] = !data.last_scan_started && !data.items.length ? ['No scan yet', 'Click Scan now to look for web services on your network.'] : EMPTY[tab];
+    $('#content').innerHTML = `<div class="empty"><b>${h}</b>${t}</div>`; return;
+  }
+  // keep focus and caret in the search box across re-renders (the list refreshes in the background)
+  const qf = document.activeElement && document.activeElement.id === 'q' ? document.activeElement.selectionStart : null;
+  const q = query.trim().toLowerCase();
+  const items = all.filter(i => matches(i, q) && !(hideGone && i.missing));
+  const gone = all.filter(i => i.missing).length;
+  const allOn = items.length && items.every(i => sel.has(i.ip));
   const so = (v, cur, label) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`;
-  $('#content').innerHTML = `<div class="line" style="margin-bottom:12px;align-items:center;display:flex;flex-wrap:wrap;gap:10px"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
-    <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('none', groupMode, 'No grouping')}</select></label>
+  const bulk = tab === 'new' ? `<button data-a="dismisssel" ${sel.size ? '' : 'disabled'}>Dismiss selected</button>`
+    : tab === 'dismissed' ? `<button data-a="restoresel" ${sel.size ? '' : 'disabled'}>Restore selected</button>` : '';
+  $('#content').innerHTML = `<div class="toolbar">
+    <span class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" id="q" placeholder="Filter: IP, name, title, MAC, note" title="Matches IP, port, names, page title, server, MAC, vendor, notes and proxy domains" value="${esc(query)}" autocomplete="off" aria-label="Filter"><kbd>/</kbd></span>
+    ${q || hideGone ? `<span class="shown">${items.length} of ${all.length} shown</span>` : ''}
+    ${gone ? `<label class="tb"><input type="checkbox" id="hidegone" ${hideGone ? 'checked' : ''}> Hide gone (${gone})</label><button class="small danger" data-a="forgetgone" title="Remove services that were not found in the last scan from this list. They come back if a later scan finds them.">Forget gone</button>` : ''}
+    <span class="vsep"></span>
+    <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('vendor', groupMode, 'By MAC vendor')}${so('none', groupMode, 'No grouping')}</select></label>
     <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}${so('title', sortBy, 'Details')}${so('mac', sortBy, 'MAC')}${so('seen', sortBy, 'Last seen')}</select>
-      <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Ascending' : '&#9660; Descending'}</button></label>
-    ${groupMode !== 'none' ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
-    ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses the providers enabled in Settings. Online providers only receive the first 3 bytes of each MAC, once per vendor prefix">Look up all MAC vendors</button>' : ''}</div>
-    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>${sortHead('name', 'Host')} / ${sortHead('ip', 'IP')} / service</th><th class="det">${sortHead('title', 'Details')}</th><th>${sortHead('mac', 'MAC')}</th><th>${sortHead('seen', 'Last seen')}</th>${extra}</tr></thead><tbody>` +
-    tableBody(items) + '</tbody></table>';
+      <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Asc' : '&#9660; Desc'}</button></label>
+    ${groupMode !== 'none' ? '<button data-a="collapseall" class="small ghost">Collapse all</button><button data-a="expandall" class="small ghost">Expand all</button>' : ''}
+    ${all.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" class="small" title="Uses the providers enabled in Settings. Online providers only receive the first 3 bytes of each MAC, once per vendor prefix">Look up MAC vendors</button>' : ''}</div>
+    <div class="toolbar" id="selbar"></div>
+    ${items.length ? `<table><thead><tr><th><input type="checkbox" id="selall" title="Select all shown" aria-label="Select all shown" ${allOn ? 'checked' : ''}></th><th>${sortHead('name', 'Host')} / ${sortHead('ip', 'IP')} / service</th><th class="det">${sortHead('title', 'Details')}</th><th>${sortHead('mac', 'MAC')}</th><th>${sortHead('seen', 'Last seen')}</th><th>${tab === 'proxied' ? 'Proxy host' : 'Action'}</th></tr></thead><tbody>` +
+    tableBody(items) + '</tbody></table>' : `<div class="empty"><b>No matches</b>Nothing on this tab matches “${esc(query)}”.</div>`}`;
+  bulkHtml = bulk; selUi();
+  if (qf !== null) { const el = $('#q'); el.focus(); el.setSelectionRange(qf, qf); }
 }
+let bulkHtml = '';
 const sel = new Set();
 const certOpt = (c, on) => `<option value="${c.id}" title="${esc((c.domains || []).join(', '))}" ${on ? 'selected' : ''}>${esc(c.name)}</option>`;
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
+let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'vendor', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
 const SORTS = ['ip', 'name', 'title', 'mac', 'seen'];
 let sortBy = SORTS.includes(lsGet('npmd.sort')) ? lsGet('npmd.sort') : 'ip';
 let sortDir = lsGet('npmd.dir') === 'desc' ? 'desc' : 'asc';
 const dispName = i => i.host_name || i.hostname || '';
-const fshort = t => t ? new Date(t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : '-';
 const macHtml = m => m && m.mac ? `<code>${esc(m.mac)}</code><br>${m.vendor ? `<span ${m.vendor_source && SOURCES[m.vendor_source] ? `title="Source: ${esc(SOURCES[m.vendor_source])}"` : ''}>${esc(m.vendor)}</span>` : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}`
   : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>';
 const collapsed = new Set((() => { try { return JSON.parse(lsGet('npmd.collapsed') || '[]'); } catch { return []; } })());
@@ -307,10 +406,10 @@ function hostHtml(ip, hn, dns, withIp = true) {
   const main = hn || dns || '';
   return `<span class="hn">${esc(main || ip)}</span>${main && withIp ? ` <span class="ipc">${esc(ip)}</span>` : ''}${hn && dns ? ` <small class="mut">${esc(dns)}</small>` : ''}`;
 }
-const renameBtn = (ip, name) => `<button class="small" data-a="rename" data-ip="${esc(ip)}" data-name="${esc(name || '')}" title="Give this host a friendly name (blank clears it)">Rename</button>`;
+const renameBtn = (ip, name) => `<button class="small ghost" data-a="rename" data-ip="${esc(ip)}" data-name="${esc(name || '')}" title="Give this host a friendly name (blank clears it)">Rename</button>`;
 // notes: plain text only (esc), line breaks kept by CSS; the full text is the tooltip in case it is clamped
 const noteHtml = n => n ? `<div class="note" title="${esc(n)}">${esc(n)}</div>` : '';
-const noteBtn = (kind, keys, note, label) => `<button class="small" data-a="note" data-kind="${kind}" data-keys="${esc(keys.join(' '))}" data-note="${esc(note || '')}" data-label="${esc(label)}" title="${kind === 'host' ? 'Notes about this host' : 'Notes about this service'}">${note ? 'Edit note' : 'Note'}</button>`;
+const noteBtn = (kind, keys, note, label) => `<button class="small ghost" data-a="note" data-kind="${kind}" data-keys="${esc(keys.join(' '))}" data-note="${esc(note || '')}" data-label="${esc(label)}" title="${kind === 'host' ? 'Notes about this host' : 'Notes about this service'}">${note ? 'Edit note' : 'Note'}</button>`;
 function groupHead(key, list) {
   const ips = [...new Set(list.map(i => i.ip))];
   const hn = (list.find(i => i.host_name) || {}).host_name || '', dns = (list.find(i => i.hostname) || {}).hostname || '';
@@ -346,12 +445,31 @@ function cmpItems(a, b) {
 }
 const sortInd = k => sortBy === k ? (sortDir === 'asc' ? ' &#9650;' : ' &#9660;') : '';
 const sortHead = (k, label) => `<span class="sh" data-sort="${k}" title="Sort by ${label.toLowerCase()} (click again to reverse)">${label}${sortInd(k)}</span>`;
+// vendor groups: known vendors A-Z, then MACs not looked up yet, then hosts without a MAC
+const NOVEND = ['v:~1', 'v:~2'];
+const vendorKey = i => i.vendor ? 'v:' + i.vendor : i.mac ? NOVEND[0] : NOVEND[1];
+function vendorHead(key, list) {
+  const ips = [...new Set(list.map(i => i.ip))], open = !collapsed.has(key);
+  const label = key === NOVEND[0] ? 'Vendor not looked up yet' : key === NOVEND[1] ? 'No MAC address'
+    : key.slice(2);
+  const hint = key === NOVEND[0] ? ' <small class="mut">(use Look up MAC vendors)</small>'
+    : key === NOVEND[1] ? ' <small class="mut">(hosts on another network segment)</small>' : '';
+  return `<tr class="ghead" data-gh="${esc(key)}"><td><input type="checkbox" class="selg" data-ips="${esc(ips.join(' '))}" ${ips.every(ip => sel.has(ip)) ? 'checked' : ''}></td>
+    <td colspan="5"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button><span class="hn">${esc(label)}</span>${hint}
+      <small class="mut"> &middot; ${ips.length} host${ips.length > 1 ? 's' : ''}, ${list.length} service${list.length > 1 ? 's' : ''}</small></td></tr>`;
+}
 function tableBody(items) {
   const sorted = items.slice().sort(cmpItems);
   if (groupMode === 'none') return sorted.map(i => row(i, false)).join('');
   const by = new Map();
-  sorted.forEach(i => { const k = groupMode === 'ip' ? i.ip : 'n:' + (dispName(i) || i.ip).toLowerCase(); if (!by.has(k)) by.set(k, []); by.get(k).push(i); });
-  return [...by.entries()].map(([k, list]) => groupHead(k, list) + list.map(i => row(i, true, k)).join('')).join('');
+  const keyOf = i => groupMode === 'ip' ? i.ip : groupMode === 'vendor' ? vendorKey(i) : 'n:' + (dispName(i) || i.ip).toLowerCase();
+  sorted.forEach(i => { const k = keyOf(i); if (!by.has(k)) by.set(k, []); by.get(k).push(i); });
+  let groups = [...by.entries()];
+  if (groupMode === 'vendor') {  // a vendor group holds many hosts, so its rows keep their own host column
+    groups.sort(([a], [b]) => (NOVEND.indexOf(a) - NOVEND.indexOf(b)) || a.localeCompare(b, undefined, {sensitivity: 'base'}));
+    return groups.map(([k, list]) => vendorHead(k, list) + list.map(i => row(i, false, k)).join('')).join('');
+  }
+  return groups.map(([k, list]) => groupHead(k, list) + list.map(i => row(i, true, k)).join('')).join('');
 }
 function setCollapsed(ip, c) {  // toggles hidden on the rows, no re-render, so typed subdomains survive
   c ? collapsed.add(ip) : collapsed.delete(ip);
@@ -363,7 +481,11 @@ document.addEventListener('change', e => {
   else if (e.target.id === 'sortby') { sortBy = e.target.value; lsSet('npmd.sort', sortBy); render(); }
 });
 const defCertId = () => (sett && sett.DEFAULT_CERT_ID) ? +sett.DEFAULT_CERT_ID.value || 0 : 0;
-function selUi() { const b = document.querySelector('button[data-a=exclsel]'); if (b) { b.disabled = !sel.size; b.textContent = `Exclude selected hosts (${sel.size})`; } }
+function selUi() {  // the selection bar only shows while hosts are ticked
+  const bar = $('#selbar'); if (!bar) return;
+  bar.hidden = !sel.size;
+  bar.innerHTML = sel.size ? `<b>${sel.size} host${sel.size > 1 ? 's' : ''} selected</b>${bulkHtml}<button data-a="exclsel">Exclude from scans</button><button class="ghost" data-a="selclear">Clear selection</button>` : '';
+}
 document.addEventListener('change', e => {  // selection is per IP: exclusions apply to a whole host
   const t = e.target, cl = t.classList;
   if (t.id !== 'selall' && !(cl && (cl.contains('sel') || cl.contains('selg')))) return;
@@ -377,29 +499,36 @@ document.addEventListener('change', e => {  // selection is per IP: exclusions a
   selUi();
 });
 
+const takenMsg = sub => {
+  const d = `${String(sub).trim().toLowerCase().replace(/\.+$/, '')}.${status.base_domain || ''}`.toLowerCase();
+  return (data.taken || []).includes(d) ? `${d} is already used by a proxy host in NPM` : '';
+};
 function row(i, grouped, gkey) {
-  const gone = i.missing ? ' <span class="gone" title="Not found in the last scan">GONE</span>' : '';
+  const forget = `<button class="small ghost" data-a="forget" data-id="${i.id}" title="Remove from this list. It comes back if a later scan finds it again.">Forget</button>`;
+  const gone = i.missing ? '<span class="chip gone" title="Not found in the last scan">GONE</span>' : isFresh(i) ? '<span class="chip fresh" title="First found by the latest scan">NEW</span>' : '';
   let action;
-  if (tab === 'proxied') action = esc(i.proxy_domains.join(' | '));
-  else if (tab === 'dismissed') action = `<button data-a="restore" data-id="${i.id}">Restore</button>`;
+  if (tab === 'proxied') action = `<div class="plinks">${(i.proxy_links || []).length ? i.proxy_links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(l.url)}">${esc(l.domain)} &#8599;</a>`).join('') : esc(i.proxy_domains.join(' | '))}</div>${i.missing ? forget : ''}`;
+  else if (tab === 'dismissed') action = `<button class="small" data-a="restore" data-id="${i.id}">Restore</button> ${i.missing ? forget : ''}`;
   else {
     const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => certOpt(c, c.id === defCertId())).join('');
+    const tk = takenMsg(i.suggestion);
     action = `<div class="act" id="r${i.id}">
-      <div class="line"><input type="text" class="sub" value="${esc(i.suggestion)}"><span>.${esc(status.base_domain)}</span><select class="cert">${opts}</select></div>
+      <div class="line"><input type="text" class="sub ${tk ? 'taken' : ''}" value="${esc(i.suggestion)}" aria-label="Subdomain" spellcheck="false"><span>.${esc(status.base_domain)}</span><select class="cert" aria-label="SSL certificate">${opts}</select></div>
       <div class="line"><label><input type="checkbox" class="be" checked> Block exploits</label>
         <label><input type="checkbox" class="ws" checked> Websockets</label><button class="primary" data-a="add" data-id="${i.id}">Add</button>
         <button data-a="dismiss" data-id="${i.id}">Dismiss</button>
-        <button data-a="exclude" data-ip="${esc(i.ip)}" data-id="${i.id}" title="Never scan this IP again">Exclude host</button></div>
-      <div class="err">${esc(rowErr[i.id] || '')}</div></div>`;
+        <button class="ghost" data-a="exclude" data-ip="${esc(i.ip)}" data-id="${i.id}" title="Never scan this IP again">Exclude host</button>${i.missing ? forget : ''}</div>
+      <div class="warnt tk">${esc(tk)}</div><div class="err">${esc(rowErr[i.id] || '')}</div></div>`;
   }
   const url = `${i.scheme}://${i.ip}:${i.port}/`;
   const hurl = i.hostname ? `${i.scheme}://${i.hostname}:${i.port}/` : '';  // reverse-DNS name, if the scan found one
   const links = `<span class="badge">${esc(i.scheme)}</span><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab"><b>${esc(i.ip)}:${i.port}</b> &#8599;</a>${gone}
       ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}`;
   const details = `<div class="dt">${i.title ? esc(i.title) : '<span class="mut">-</span>'}</div>${i.server ? `<small class="mut">${esc(i.server)}</small>` : ''} ${noteBtn('service', [`${i.ip}:${i.port}`], i.note, `${i.ip}:${i.port}`)}${noteHtml(i.note)}`;
-  const seen = `<span title="First seen ${esc(fmt(i.first_seen))}">${esc(fshort(i.last_seen))}</span>`;
+  const seen = `<span title="Last seen ${esc(fmt(i.last_seen))}&#10;First seen ${esc(fmt(i.first_seen))}">${esc(rel(i.last_seen))}</span>`;
   if (grouped) return `<tr class="svc" data-g="${esc(gkey)}" ${collapsed.has(gkey) ? 'hidden' : ''}><td></td><td>${links}</td><td class="dtc">${details}</td><td></td><td class="mut">${seen}</td><td>${action}</td></tr>`;
-  return `<tr><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
+  const gattr = gkey ? ` data-g="${esc(gkey)}" ${collapsed.has(gkey) ? 'hidden' : ''}` : '';  // flat rows inside a vendor group
+  return `<tr class="flat${gkey ? ' svc' : ''}"${gattr}><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
     <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)} ${noteBtn('host', [i.ip], i.host_note, i.ip)}</div>${noteHtml(i.host_note)}${links}</td><td class="dtc">${details}</td>
     <td>${macHtml(i)}</td><td class="mut">${seen}</td><td>${action}</td></tr>`;
 }
@@ -427,7 +556,52 @@ $('#nd-clear').onclick = () => saveNote('');
 $('#nd-cancel').onclick = () => $('#notedlg').close();
 $('#nd-text').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNote($('#nd-text').value); } });
 
-document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); } if (tab === 'history') await loadHistory(); render(); return; }
+// rename: dialog instead of prompt(); a host-name group can hold several IPs and all get the same name
+let nameIps = [];
+$('#nameform').addEventListener('submit', async e => {
+  if (e.submitter && e.submitter.value === 'cancel') return;
+  e.preventDefault();
+  try {
+    for (const ip of nameIps) await api('/api/hosts/name', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip, name: $('#nm-text').value})});
+    $('#namedlg').close(); await loadData();
+  } catch (err) { $('#nm-err').textContent = err.message; }
+});
+async function bulk(ids, path, verb) {  // run one POST per discovery, then report in a toast
+  let ok = 0; const failed = [];
+  for (const id of ids) {
+    const p = path(id), del = p.startsWith('DELETE ');
+    try { await api(del ? p.slice(7) : p, {method: del ? 'DELETE' : 'POST'}); ok++; }
+    catch (err) { failed.push(err.message); }
+  }
+  sel.clear(); await loadData();
+  if (ok) toast(`${verb} ${ok} service${ok > 1 ? 's' : ''}.`);
+  if (failed.length) toast(`${failed.length} failed: ${failed[0]}`, 'bad');
+}
+async function switchTab(k) {
+  tab = k; sdirty = false; sel.clear();
+  try { history.replaceState(null, '', '#' + k); } catch {}
+  if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); }
+  if (tab === 'history') await loadHistory();
+  render();
+}
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { query = e.target.value; render(); }
+  else if (e.target.classList.contains('sub')) {  // warn while typing if NPM already has this name
+    const m = takenMsg(e.target.value), r = e.target.closest('.act');
+    e.target.classList.toggle('taken', !!m); r.querySelector('.tk').textContent = m;
+  }
+});
+addEventListener('hashchange', () => { const k = location.hash.slice(1); if (k !== tab && TABS.some(([x]) => x === k)) switchTab(k); });
+document.addEventListener('change', e => { if (e.target.id === 'hidegone') { hideGone = e.target.checked; render(); } });
+document.addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector('dialog[open]');
+  if (e.key === '/' && !typing && $('#q')) { e.preventDefault(); $('#q').focus(); $('#q').select(); }
+  else if (e.key === 'Escape' && e.target.id === 'q' && query) { e.preventDefault(); query = ''; render(); }
+  else if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('tab')) { e.preventDefault(); switchTab(e.target.dataset.t); }
+  else if (e.key === 'Enter' && e.target.classList.contains('sub')) { e.preventDefault(); const r = e.target.closest('.act'); r.querySelector('[data-a=add]').click(); }
+});
+
+document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { await switchTab(t.dataset.t); return; }
   const sh = e.target.closest('[data-sort]');
   if (sh) { const k = sh.dataset.sort; if (sortBy === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc'; else { sortBy = k; sortDir = 'asc'; } lsSet('npmd.sort', sortBy); lsSet('npmd.dir', sortDir); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
@@ -439,13 +613,21 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
   }
   if (a === 'sortdir') { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; lsSet('npmd.dir', sortDir); render(); return; }
   if (a === 'rename') {
-    const ips = b.dataset.ip.split(' ');  // a host-name group can hold several IPs; all get the same name
-    const nm = prompt(`Name for ${ips.join(', ')} (leave blank to remove the saved name):`, b.dataset.name);
-    if (nm === null) return;
-    try {
-      for (const ip of ips) await api('/api/hosts/name', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip, name: nm})});
-      await loadData();
-    } catch (err) { alert(err.message); }
+    nameIps = b.dataset.ip.split(' ');
+    $('#nm-sub').textContent = nameIps.join(', '); $('#nm-err').textContent = '';
+    $('#nm-text').value = b.dataset.name; $('#namedlg').showModal(); $('#nm-text').select();
+    return;
+  }
+  if (a === 'selclear') { sel.clear(); render(); return; }
+  if (a === 'dismisssel' || a === 'restoresel') {
+    const ids = data.items.filter(i => i.state === tab && sel.has(i.ip)).map(i => i.id);
+    await bulk(ids, x => `/api/discoveries/${x}/${a === 'dismisssel' ? 'dismiss' : 'restore'}`, a === 'dismisssel' ? 'Dismissed' : 'Restored');
+    return;
+  }
+  if (a === 'forget' || a === 'forgetgone') {
+    const ids = a === 'forget' ? [+id] : data.items.filter(i => i.state === tab && i.missing).map(i => i.id);
+    if (a === 'forgetgone' && !confirm(`Forget ${ids.length} gone service${ids.length > 1 ? 's' : ''} on this tab?\nThey come back if a later scan finds them again.`)) return;
+    await bulk(ids, x => `DELETE /api/discoveries/${x}`, 'Forgot');
     return;
   }
   if (a === 'hlog') {
@@ -458,7 +640,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
         ? `<div class="slog">${items.map(l => `<div class="l-${esc(l.level)}"><span class="mut">${esc(time(l.ts))}</span> ${esc(l.level === 'info' ? '' : l.level.toUpperCase() + ':')} ${esc(l.msg)}</div>`).join('')}</div>`
         : '<span class="mut">No log was recorded for this scan (it ran before logging existed).</span>';
       row.hidden = false;
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast(err.message, 'bad'); }
     return;
   }
   if (a === 'note') { openNote(b.dataset.kind, b.dataset.keys.split(' '), b.dataset.note, b.dataset.label); return; }
@@ -469,7 +651,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
       const items = (await api('/api/history/' + id)).items;
       row.firstElementChild.innerHTML = items.length ? items.map(i => `${esc(i.ip)}:${i.port} ${esc(i.scheme)} - ${esc(i.title) || '(no title)'}`).join('<br>') : 'No services.';
       row.hidden = false;
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast(err.message, 'bad'); }
     return;
   }
   if (a === 'vendor' || a === 'vendorall') {
@@ -477,9 +659,9 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
     try {
       const r = await api(a === 'vendor' ? `/api/discoveries/${id}/vendor` : '/api/vendors/lookup', {method: 'POST'});
       await loadData();
-      if (r.warnings && r.warnings.length) alert('MAC lookup notes:\n' + r.warnings.join('\n'));
+      if (r.warnings && r.warnings.length) toast('MAC lookup notes:\n' + r.warnings.join('\n'), 'warn');
     }
-    catch (err) { alert(err.message); b.disabled = false; }
+    catch (err) { toast(err.message, 'bad'); b.disabled = false; }
     return;
   }
   if (a === 'exclsel') {
@@ -491,7 +673,8 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
       catch (err) { failed.push(ip + ': ' + err.message); }
     }
     sel.clear(); await loadExcl(); await loadData();
-    if (failed.length) alert('Some could not be excluded:\n' + failed.join('\n'));
+    if (failed.length) toast('Some could not be excluded:\n' + failed.join('\n'), 'bad');
+    else toast(`Excluded ${ips.length} host${ips.length > 1 ? 's' : ''}.`);
     return;
   }
   if (a.startsWith('s')) {
@@ -553,7 +736,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
         else if (a === 'exclude') { if (!confirm(`Exclude ${b.dataset.ip}? It will be skipped by all future scans.`)) return;
           await api('/api/exclusions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value: b.dataset.ip})}); }
         else await api('/api/exclusions/' + id, {method: 'DELETE'});
-      } catch (err) { exclErr = err.message; if (a === 'exclude') alert(err.message); }
+      } catch (err) { exclErr = err.message; if (a === 'exclude') toast(err.message, 'bad'); }
       const typed = (a === 'addexcl' && $('#exv')) ? $('#exv').value : '';
       await loadExcl();
       if (a === 'exclude') await loadData(); else render();
@@ -563,9 +746,11 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
     if (a === 'add') {
       const r = $('#r' + id), cert = +r.querySelector('.cert').value;
       b.disabled = true; delete rowErr[id];
-      await api(`/api/discoveries/${id}/add`, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      const res = await api(`/api/discoveries/${id}/add`, {method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({subdomain: r.querySelector('.sub').value, block_exploits: r.querySelector('.be').checked,
           websockets: r.querySelector('.ws').checked, certificate_id: cert || null})});
+      const u = `${cert ? 'https' : 'http'}://${res.domain}/`;
+      toast(`Added ${res.domain} to NPM. `, 'ok', `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Open &#8599;</a>`);
     } else await api(`/api/discoveries/${id}/${a}`, {method: 'POST'});
     await loadData();
   } catch (err) {
@@ -575,7 +760,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
 
 $('#stop').onclick = async () => {
   $('#stop').disabled = true;
-  try { await api('/api/scan/stop', {method: 'POST'}); } catch (e) { alert(e.message); }
+  try { await api('/api/scan/stop', {method: 'POST'}); } catch (e) { toast(e.message, 'bad'); }
   $('#stop').disabled = false;
   loadStatus();
 };
@@ -597,14 +782,21 @@ $('#scan').onclick = async () => {
     + (n ? n + ' exclusion' + (n === 1 ? ' is' : 's are') + ' active.' : 'No exclusions are set, so every host in the subnets will be scanned.')
     + '\n\nStart the scan?';
   if (!confirm(msg)) return;
-  try { await api('/api/scan', {method: 'POST'}); } catch (e) { alert(e.message); }
+  try { await api('/api/scan', {method: 'POST'}); } catch (e) { toast(e.message, 'bad'); }
   loadStatus();
 };
 
 let wasRunning = false;
 async function tick() {
   await loadStatus();
-  if (wasRunning && !status.running) { await loadData(); await loadHistory(); }
+  if (wasRunning && !status.running) {
+    await loadData(); await loadHistory();
+    const l = status.last || {};
+    if (l.status === 'finished') toast(`Scan finished: ${l.found} services, ${l.new_count} new, ${l.gone_count} gone.`);
+    else if (l.status === 'stopped') toast('Scan stopped. Nothing from that run was saved.', 'warn');
+    else if (l.status === 'failed') toast('Scan failed: ' + (l.error || 'unknown error'), 'bad');
+    if (tab === 'history') render();
+  }
   wasRunning = status.running;
 }
 (async () => { await loadStatus(); await loadCerts(); await loadSettings(); await loadExcl(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();
