@@ -141,6 +141,7 @@ async def discoveries():
     await refresh_hosts()
     items = []
     excl = all_exclusions()
+    names = {n["ip"]: n["name"] for n in db.q("SELECT ip, name FROM host_names")}
     for r in db.q("SELECT * FROM discoveries ORDER BY ip, port"):
         if any(excl_covers(s, r["ip"]) for s in excl):
             continue
@@ -148,8 +149,30 @@ async def discoveries():
         r["state"] = "dismissed" if r["dismissed"] else ("proxied" if proxies else "new")
         r["proxy_domains"] = proxies
         r["suggestion"] = suggest(r)
+        r["host_name"] = names.get(r["ip"], "")
         items.append(r)
     return {"items": items, "npm_error": _cache["error"]}
+
+
+class HostNameReq(BaseModel):
+    ip: str
+    name: str = ""
+
+
+@app.put("/api/hosts/name")
+async def set_host_name(req: HostNameReq):
+    try:
+        ip = str(ipaddress.IPv4Address(req.ip.strip()))
+    except ValueError:
+        raise HTTPException(400, "Not a valid IPv4 address")
+    name = req.name.strip()
+    if len(name) > 100:
+        raise HTTPException(400, "Name is too long (max 100 characters)")
+    if name:
+        db.x("INSERT INTO host_names(ip, name) VALUES(?,?) ON CONFLICT(ip) DO UPDATE SET name=excluded.name", (ip, name))
+    else:
+        db.x("DELETE FROM host_names WHERE ip=?", (ip,))
+    return {"ok": True, "ip": ip, "name": name}
 
 
 @app.get("/api/certificates")

@@ -49,6 +49,10 @@ button.small{padding:1px 8px;font-size:12px}
 small.mut{color:var(--mut)}
 #logout{color:var(--mut);font-size:13px}
 .sett #smsg{min-height:1.4em}
+tr.ghead td{background:color-mix(in srgb,var(--acc) 7%,var(--card));border-top:2px solid var(--line);vertical-align:middle}
+button.caret{padding:0 6px;font-size:12px;margin-right:6px;line-height:20px}
+.ipc{font-size:12px;color:var(--mut);font-family:ui-monospace,Consolas,monospace}
+.hn{font-weight:600}
 </style>
 </head>
 <body>
@@ -126,7 +130,7 @@ function renderSettings() {
      <label class="sf"><span><input type="checkbox" id="bk-sec"> Include passwords (NPM password and web page password)</span><small class="mut">Anyone with the file can read the NPM password. Off by default; you re-enter it after restoring.</small></label>
      <div class="line"><button data-a="sbackup">Download backup</button></div>
      <div class="line"><input type="file" id="rf" accept=".json,application/json"><button data-a="srestore">Restore from file</button></div>
-     <small class="mut">Restoring replaces settings, exclusions and, if the file has them, discoveries and history.</small>
+     <small class="mut">Restoring replaces settings, exclusions, host names and, if the file has them, discoveries and history.</small>
      <h3>Maintenance</h3><div class="line"><button data-a="sreset">Reset all to config.env</button><button data-a="srestart">Restart service</button></div>
      <small class="mut">Settings saved here override config.env. Skipped addresses are on the Exclusions tab.</small></div>`;
 }
@@ -195,12 +199,50 @@ function render() {
   const defSel = tab !== 'new' ? '' : `<label style="display:flex;gap:6px;align-items:center;margin-left:auto"><small class="mut">Default certificate</small>
     <select id="defcert"><option value="0">None</option>${certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>`;
   $('#content').innerHTML = `<div class="line" style="margin-bottom:10px;align-items:center"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
+    <label><input type="checkbox" id="grp" ${group ? 'checked' : ''}> Group by host</label>
+    ${group ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
     ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}
     ${defSel}</div>
-    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>IP : Port</th><th>Scheme</th><th>Title</th><th>Server</th><th>Hostname</th><th>MAC</th><th>First / last seen</th>${extra}</tr></thead><tbody>` +
-    items.map(row).join('') + '</tbody></table>';
+    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th>${group ? '<th>Host / service</th><th>Scheme</th><th>Title</th><th>Server</th><th>MAC / first &amp; last seen</th>' : '<th>Host / IP : Port</th><th>Scheme</th><th>Title</th><th>Server</th><th>Hostname</th><th>MAC</th><th>First / last seen</th>'}${extra}</tr></thead><tbody>` +
+    tableBody(items) + '</tbody></table>';
 }
 const sel = new Set();
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let group = lsGet('npmd.group') !== '0';
+const collapsed = new Set((() => { try { return JSON.parse(lsGet('npmd.collapsed') || '[]'); } catch { return []; } })());
+const saveCollapsed = () => lsSet('npmd.collapsed', JSON.stringify([...collapsed]));
+const ipKey = ip => ip.split('.').reduce((a, o) => a * 256 + (+o || 0), 0);
+// main name: saved name, else reverse-DNS name, else the IP; the IP (and a second name) stay visible beside it
+function hostHtml(ip, hn, dns, withIp = true) {
+  const main = hn || dns || '';
+  return `<span class="hn">${esc(main || ip)}</span>${main && withIp ? ` <span class="ipc">${esc(ip)}</span>` : ''}${hn && dns ? ` <small class="mut">${esc(dns)}</small>` : ''}`;
+}
+const renameBtn = (ip, name) => `<button class="small" data-a="rename" data-ip="${esc(ip)}" data-name="${esc(name || '')}" title="Give this host a friendly name (blank clears it)">Rename</button>`;
+function groupHead(ip, list) {
+  const hn = (list.find(i => i.host_name) || {}).host_name || '', dns = (list.find(i => i.hostname) || {}).hostname || '';
+  const m = list.find(i => i.mac), open = !collapsed.has(ip);
+  return `<tr class="ghead" data-gh="${esc(ip)}"><td><input type="checkbox" class="sel" data-ip="${esc(ip)}" ${sel.has(ip) ? 'checked' : ''}></td>
+    <td colspan="4"><button class="caret" data-a="gtoggle" data-ip="${esc(ip)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button>${hostHtml(ip, hn, dns)}
+      <small class="mut"> · ${list.length} service${list.length > 1 ? 's' : ''}</small></td>
+    <td>${m ? `<code>${esc(m.mac)}</code><br>${m.vendor ? esc(m.vendor) : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}` : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>'}</td>
+    <td>${renameBtn(ip, hn)}</td></tr>`;
+}
+function tableBody(items) {
+  if (!group) return items.map(i => row(i, false)).join('');
+  const by = new Map();
+  items.forEach(i => { if (!by.has(i.ip)) by.set(i.ip, []); by.get(i.ip).push(i); });
+  return [...by.keys()].sort((a, b) => ipKey(a) - ipKey(b)).map(ip => groupHead(ip, by.get(ip)) + by.get(ip).map(i => row(i, true)).join('')).join('');
+}
+function setCollapsed(ip, c) {  // toggles hidden on the rows, no re-render, so typed subdomains survive
+  c ? collapsed.add(ip) : collapsed.delete(ip);
+  document.querySelectorAll('tr.svc').forEach(r => { if (r.dataset.g === ip) r.hidden = c; });
+  document.querySelectorAll('tr.ghead').forEach(r => { if (r.dataset.gh === ip) r.querySelector('.caret').innerHTML = c ? '&#9654;' : '&#9660;'; });
+}
+document.addEventListener('change', e => {
+  if (e.target.id !== 'grp') return;
+  group = e.target.checked; lsSet('npmd.group', group ? '1' : '0'); render();
+});
 const defCertId = () => (sett && sett.DEFAULT_CERT_ID) ? +sett.DEFAULT_CERT_ID.value || 0 : 0;
 document.addEventListener('change', async e => {
   if (e.target.id !== 'defcert') return;
@@ -224,7 +266,7 @@ document.addEventListener('change', e => {
   }
 });
 
-function row(i) {
+function row(i, grouped) {
   const gone = i.missing ? ' <span class="gone" title="Not found in the last scan">GONE</span>' : '';
   let action;
   if (tab === 'proxied') action = esc(i.proxy_domains.join(' | '));
@@ -243,18 +285,34 @@ function row(i) {
   }
   const url = `${i.scheme}://${i.ip}:${i.port}/`;
   const hurl = i.hostname ? `${i.scheme}://${i.hostname}:${i.port}/` : '';  // reverse-DNS name, if the scan found one
+  const links = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab">${grouped ? `<b>:${i.port}</b>` : `<b>${esc(i.ip)}</b>:${i.port}`} &#8599;</a>${gone}
+      ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}`;
+  const seen = `${fmt(i.first_seen)}<br>${fmt(i.last_seen)}`;
+  if (grouped) return `<tr class="svc" data-g="${esc(i.ip)}" ${collapsed.has(i.ip) ? 'hidden' : ''}><td></td><td>${links}</td><td>${esc(i.scheme)}</td>
+    <td>${esc(i.title) || '<span class="mut">-</span>'}</td><td>${esc(i.server)}</td><td class="mut">${seen}</td><td>${action}</td></tr>`;
   return `<tr><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
-    <td><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab"><b>${esc(i.ip)}</b>:${i.port} &#8599;</a>${gone}
-      ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
+    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)}</div>${links}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
     <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td>
     <td>${i.mac ? `<code>${esc(i.mac)}</code><br>${i.vendor ? esc(i.vendor) : `<button data-a="vendor" data-id="${i.id}" class="small">Look up</button>`}`
       : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>'}</td>
-    <td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
+    <td class="mut">${seen}</td><td>${action}</td></tr>`;
 }
 
 document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); } if (tab === 'history') await loadHistory(); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a;
+  if (a === 'gtoggle') { setCollapsed(b.dataset.ip, !collapsed.has(b.dataset.ip)); saveCollapsed(); return; }
+  if (a === 'collapseall' || a === 'expandall') {
+    document.querySelectorAll('tr.ghead').forEach(r => setCollapsed(r.dataset.gh, a === 'collapseall'));
+    saveCollapsed(); return;
+  }
+  if (a === 'rename') {
+    const nm = prompt(`Name for ${b.dataset.ip} (leave blank to remove the saved name):`, b.dataset.name);
+    if (nm === null) return;
+    try { await api('/api/hosts/name', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip: b.dataset.ip, name: nm})}); await loadData(); }
+    catch (err) { alert(err.message); }
+    return;
+  }
   if (a === 'hshow') {
     const row = $('#h' + id);
     if (!row.hidden) { row.hidden = true; return; }
@@ -304,7 +362,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
         const f = $('#rf').files[0]; if (!f) { msg('Choose a backup file first.', true); return; }
         const text = await f.text(); let d;
         try { d = JSON.parse(text); } catch { msg('That file is not valid JSON.', true); return; }
-        const parts = ['settings', 'exclusions', 'discoveries', 'scans'].filter(k => k in d);
+        const parts = ['settings', 'exclusions', 'host_names', 'discoveries', 'scans'].filter(k => k in d);
         if (!confirm(`Restore from ${f.name}?\nThis replaces: ${parts.join(', ') || 'nothing recognised'}.`)) return;
         await api('/api/restore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: text});
         sdirty = false; await Promise.all([loadSettings(), loadExcl(), loadHistory(), loadStatus()]); await loadData(); renderSettings();
