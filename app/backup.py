@@ -51,6 +51,30 @@ async def backup(results: bool = True, secrets: bool = False):
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
+NUM_COLS = {"port", "first_seen", "last_seen", "dismissed", "missing", "id", "started", "finished", "found",
+            "new_count", "gone_count", "scan_id"}
+
+
+def _check_row(d, cols, what):
+    """The UI inserts some of these values into HTML unescaped (ports, counts) or into links (scheme), so a
+    restored file must not be able to smuggle text into numeric columns or a javascript: scheme."""
+    if not isinstance(d, dict):
+        raise HTTPException(400, f"Backup has a malformed {what}")
+    for c in cols:
+        v = d.get(c)
+        if v is None:
+            continue
+        if c in NUM_COLS:
+            ok = isinstance(v, (int, float)) and not isinstance(v, bool)
+        elif c == "scheme":
+            ok = v in ("http", "https")
+        else:
+            ok = isinstance(v, str)
+        if not ok:
+            raise HTTPException(400, f"Backup has an invalid {c} in a {what}")
+    return tuple(d.get(c) for c in cols)
+
+
 def _validate(data):
     """Check the whole file before touching the database. Returns cleaned sections."""
     if not isinstance(data, dict) or data.get("app") != "npm-discovery":
@@ -78,13 +102,13 @@ def _validate(data):
     if "discoveries" in data:
         rows = []
         for d in data["discoveries"] or []:
-            if not (isinstance(d.get("ip"), str) and isinstance(d.get("port"), int)):
+            if not (isinstance(d, dict) and isinstance(d.get("ip"), str) and isinstance(d.get("port"), int)):
                 raise HTTPException(400, "Backup has a malformed discovery")
-            rows.append(tuple(d.get(c) for c in DISC_COLS))
+            rows.append(_check_row(d, DISC_COLS, "discovery"))
         clean["discoveries"] = rows
     if "scans" in data:
-        clean["scans"] = [tuple(s.get(c) for c in SCAN_COLS) for s in data["scans"] or []]
-        clean["scan_hits"] = [tuple(h.get(c) for c in HIT_COLS) for h in data.get("scan_hits") or []]
+        clean["scans"] = [_check_row(s, SCAN_COLS, "scan") for s in data["scans"] or []]
+        clean["scan_hits"] = [_check_row(h, HIT_COLS, "scan result") for h in data.get("scan_hits") or []]
     return clean
 
 
