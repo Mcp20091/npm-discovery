@@ -1,11 +1,12 @@
 """Backup / restore and scan history.
 
-A backup is one JSON file: settings, exclusions and (optionally) discoveries with their dismissals,
+A backup is one JSON file: settings, exclusions, saved host names and (optionally) discoveries with their dismissals,
 scan history and each scan's service list. Passwords (NPM password, web page password hash) are only
 included when asked for. Restoring REPLACES every section that is present in the file.
 
 main.py fills in `hooks` (normalize_exclusion, reload) so this module never imports main.
 """
+import ipaddress
 import json
 import time
 
@@ -41,6 +42,7 @@ async def backup(results: bool = True, secrets: bool = False):
         "settings": {r["key"]: r["value"] for r in db.q("SELECT key, value FROM settings")
                      if secrets or r["key"] not in SECRET_KEYS},
         "exclusions": [r["value"] for r in db.q("SELECT value FROM exclusions ORDER BY id")],
+        "host_names": {r["ip"]: r["name"] for r in db.q("SELECT ip, name FROM host_names ORDER BY ip")},
     }
     if results:
         out["discoveries"] = db.q("SELECT %s FROM discoveries ORDER BY id" % ",".join(DISC_COLS))
@@ -75,6 +77,21 @@ def _validate(data):
         clean["settings"] = s
     if "exclusions" in data:
         clean["exclusions"] = [hooks["normalize"](v) for v in data["exclusions"] or []]
+    if "host_names" in data:
+        hn = data["host_names"] or {}
+        if not isinstance(hn, dict):
+            raise HTTPException(400, "Backup has malformed host names")
+        names = []
+        for ip, name in hn.items():
+            try:
+                ip = str(ipaddress.IPv4Address(ip))
+            except ValueError:
+                raise HTTPException(400, f"Backup has a host name for an invalid IP: {ip}")
+            if not isinstance(name, str) or len(name.strip()) > 100:
+                raise HTTPException(400, f"Backup has an invalid host name for {ip}")
+            if name.strip():
+                names.append((ip, name.strip()))
+        clean["host_names"] = names
     if "discoveries" in data:
         rows = []
         for d in data["discoveries"] or []:
@@ -108,6 +125,9 @@ async def restore(request: Request):
                 c.execute("DELETE FROM exclusions")
                 c.executemany("INSERT OR IGNORE INTO exclusions(value, added) VALUES(?,?)",
                               [(v, time.time()) for v in clean["exclusions"]])
+            if "host_names" in clean:
+                c.execute("DELETE FROM host_names")
+                c.executemany("INSERT OR REPLACE INTO host_names VALUES(?,?)", clean["host_names"])
             if "discoveries" in clean:
                 c.execute("DELETE FROM discoveries")
                 c.executemany("INSERT OR REPLACE INTO discoveries(%s) VALUES(%s)" % (
