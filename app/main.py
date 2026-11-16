@@ -110,7 +110,9 @@ async def status():
     last = db.q("SELECT * FROM scans ORDER BY id DESC LIMIT 1")
     return {"running": scanner.state["running"], "last": last[0] if last else None,
             "base_domain": config.BASE_DOMAIN, "config_problems": config.problems(),
-            "interval_hours": config.SCAN_INTERVAL_HOURS}
+            "interval_hours": config.SCAN_INTERVAL_HOURS,
+            "subnets": config.SCAN_SUBNETS,
+            "exclusion_count": len(config.SCAN_EXCLUDE) + db.q("SELECT COUNT(*) AS n FROM exclusions")[0]["n"]}
 
 
 @app.post("/api/scan")
@@ -120,6 +122,13 @@ async def scan_now():
     asyncio.create_task(scan_and_refresh())
     await asyncio.sleep(0.1)
     return {"started": True}
+
+
+@app.post("/api/scan/stop")
+async def scan_stop():
+    if not scanner.stop_scan():
+        raise HTTPException(409, "No scan is running")
+    return {"stopping": True}
 
 
 @app.get("/api/discoveries")

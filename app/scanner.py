@@ -12,7 +12,27 @@ from . import config, db
 
 TLS_FIRST = {443, 8443, 8444, 9443, 4443, 5001, 8006, 8007}
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
-state = {"running": False}
+state = {"running": False, "stop": False, "proc": None, "tasks": []}
+
+
+class ScanStopped(Exception):
+    pass
+
+
+def stop_scan():
+    """Kill nmap and cancel probes of the running scan. Returns False if none is running."""
+    if not state["running"]:
+        return False
+    state["stop"] = True
+    proc = state["proc"]
+    if proc and proc.returncode is None:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+    for t in state["tasks"]:
+        t.cancel()
+    return True
 
 
 async def run_nmap():
@@ -27,7 +47,13 @@ async def run_nmap():
             *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     except FileNotFoundError:
         raise RuntimeError("nmap is not installed")
+    state["proc"] = proc
+    if state["stop"]:  # stop pressed while nmap was starting
+        proc.kill()
     out, err = await proc.communicate()
+    state["proc"] = None
+    if state["stop"]:
+        raise ScanStopped()
     if proc.returncode != 0:
         raise RuntimeError(f"nmap failed: {err.decode(errors='replace').strip()[:300]}")
     found = []
@@ -87,7 +113,7 @@ async def run_scan():
     """Returns False if a scan was already running."""
     if state["running"]:
         return False
-    state["running"] = True
+    state.update(running=True, stop=False, proc=None, tasks=[])
     started = time.time()
     scan_id = db.x("INSERT INTO scans(started,status) VALUES(?, 'running')", (started,)).lastrowid
     try:
@@ -107,13 +133,24 @@ async def run_scan():
                         names[ip] = asyncio.ensure_future(rdns(ip))
                     info.update(ip=ip, port=port, hostname=await names[ip])
                     return info
-            results = [r for r in await asyncio.gather(*(one(i, p) for i, p in open_ports)) if r]
+            state["tasks"] = [asyncio.ensure_future(one(i, p)) for i, p in open_ports]
+            if state["stop"]:
+                stop_scan()
+            done = await asyncio.gather(*state["tasks"], return_exceptions=True)
+            if state["stop"]:
+                raise ScanStopped()
+            for r in done:
+                if isinstance(r, BaseException):
+                    raise r
+            results = [r for r in done if r]
         db.save_scan_results(results, started)
         db.x("UPDATE scans SET status='finished', finished=?, found=? WHERE id=?",
              (time.time(), len(results), scan_id))
+    except ScanStopped:
+        db.x("UPDATE scans SET status='stopped', finished=? WHERE id=?", (time.time(), scan_id))
     except Exception as e:
         db.x("UPDATE scans SET status='failed', finished=?, error=? WHERE id=?",
              (time.time(), str(e), scan_id))
     finally:
-        state["running"] = False
+        state.update(running=False, stop=False, proc=None, tasks=[])
     return True
