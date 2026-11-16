@@ -25,7 +25,8 @@ NPM_PASSWORD = os.environ.get("NPM_PASSWORD", "")
 NPM_VERIFY_TLS = _bool("NPM_VERIFY_TLS", True)
 
 SCAN_SUBNETS = [s.strip() for s in os.environ.get("SCAN_SUBNETS", "").split(",") if s.strip()]
-BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "").strip().strip(".")
+SCAN_EXCLUDE = [s.strip() for s in os.environ.get("SCAN_EXCLUDE", "").split(",") if s.strip()]
+BASE_DOMAIN =os.environ.get("BASE_DOMAIN", "").strip().strip(".")
 SCAN_INTERVAL_HOURS = _float("SCAN_INTERVAL_HOURS", 6)
 SCAN_ON_START = _bool("SCAN_ON_START", True)
 SCAN_PORTS = [int(p) for p in os.environ.get(

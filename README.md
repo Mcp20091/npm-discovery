@@ -47,6 +47,7 @@ does not exist), and enables a systemd service that starts on boot. Data (SQLite
 | `NPM_EMAIL`, `NPM_PASSWORD` | required | NPM login (account must not use 2FA) |
 | `NPM_VERIFY_TLS` | `true` | Set `false` for an https NPM_URL with a self-signed cert |
 | `SCAN_SUBNETS` | required | Comma separated CIDRs, e.g. `192.168.1.0/24,192.168.2.0/24` |
+| `SCAN_EXCLUDE` | empty | IPs/ranges to skip, e.g. `192.168.1.1,192.168.1.50-60` |
 | `BASE_DOMAIN` | required | Proxy hosts become `<subdomain>.<BASE_DOMAIN>` |
 | `SCAN_INTERVAL_HOURS` | `6` | Scheduled scan interval; `0` disables scheduling |
 | `SCAN_ON_START` | `true` | Scan shortly after service start |
