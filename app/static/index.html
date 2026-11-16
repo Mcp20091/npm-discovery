@@ -39,6 +39,8 @@ main{overflow-x:auto}
 code{font-size:12px}
 button.small{padding:3px 10px;font-size:13px}
 /* roomier text, tighter table */
+.sh{cursor:pointer;user-select:none}
+.sh:hover{color:var(--fg);text-decoration:underline}
 body{font-size:15px}
 a{color:var(--acc)}
 main{max-width:1800px}
@@ -222,11 +224,11 @@ function render() {
   const so = (v, cur, label) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`;
   $('#content').innerHTML = `<div class="line" style="margin-bottom:12px;align-items:center;display:flex;flex-wrap:wrap;gap:10px"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
     <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('none', groupMode, 'No grouping')}</select></label>
-    <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}</select>
+    <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}${so('title', sortBy, 'Details')}${so('mac', sortBy, 'MAC')}${so('seen', sortBy, 'Last seen')}</select>
       <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Ascending' : '&#9660; Descending'}</button></label>
     ${groupMode !== 'none' ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
     ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}</div>
-    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>Host / service</th><th class="det">Details</th><th>MAC</th><th>Last seen</th>${extra}</tr></thead><tbody>` +
+    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>${sortHead('name', 'Host')} / ${sortHead('ip', 'IP')} / service</th><th class="det">${sortHead('title', 'Details')}</th><th>${sortHead('mac', 'MAC')}</th><th>${sortHead('seen', 'Last seen')}</th>${extra}</tr></thead><tbody>` +
     tableBody(items) + '</tbody></table>';
 }
 const sel = new Set();
@@ -234,7 +236,8 @@ const certOpt = (c, on) => `<option value="${c.id}" title="${esc((c.domains || [
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
-let sortBy = lsGet('npmd.sort') === 'name' ? 'name' : 'ip';
+const SORTS = ['ip', 'name', 'title', 'mac', 'seen'];
+let sortBy = SORTS.includes(lsGet('npmd.sort')) ? lsGet('npmd.sort') : 'ip';
 let sortDir = lsGet('npmd.dir') === 'desc' ? 'desc' : 'asc';
 const dispName = i => i.host_name || i.hostname || '';
 const fshort = t => t ? new Date(t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : '-';
@@ -261,13 +264,25 @@ function groupHead(key, list) {
     <td>${macHtml(list.find(i => i.mac))}</td>
     <td colspan="2">${renameBtn(ips.join(' '), hn)}</td></tr>`;
 }
-function cmpItems(a, b) {
-  let r = 0;
-  if (sortBy === 'name') r = (dispName(a) || a.ip).toLowerCase().localeCompare((dispName(b) || b.ip).toLowerCase(), undefined, {numeric: true});
-  if (!r) r = ipKey(a.ip) - ipKey(b.ip);
-  if (sortDir === 'desc') r = -r;
-  return r || a.port - b.port;  // ports always ascending within a host
+function sortKey(i) {
+  switch (sortBy) {
+    case 'name': return (dispName(i) || i.ip).toLowerCase();
+    case 'title': return (i.title || '').toLowerCase() || null;
+    case 'mac': return i.mac || null;
+    case 'seen': return i.last_seen || null;
+    default: return ipKey(i.ip);
+  }
 }
+function cmpItems(a, b) {
+  const ka = sortKey(a), kb = sortKey(b);
+  let r = 0;
+  if (ka === null || kb === null) { if (ka !== kb) return ka === null ? 1 : -1; }  // empty values always sort last
+  else r = typeof ka === 'string' ? ka.localeCompare(kb, undefined, {numeric: true}) : ka - kb;
+  if (sortDir === 'desc') r = -r;
+  return r || ipKey(a.ip) - ipKey(b.ip) || a.port - b.port;  // ports always ascending within a host
+}
+const sortInd = k => sortBy === k ? (sortDir === 'asc' ? ' &#9650;' : ' &#9660;') : '';
+const sortHead = (k, label) => `<span class="sh" data-sort="${k}" title="Sort by ${label.toLowerCase()} (click again to reverse)">${label}${sortInd(k)}</span>`;
 function tableBody(items) {
   const sorted = items.slice().sort(cmpItems);
   if (groupMode === 'none') return sorted.map(i => row(i, false)).join('');
@@ -327,6 +342,8 @@ function row(i, grouped, gkey) {
 }
 
 document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); } if (tab === 'history') await loadHistory(); render(); return; }
+  const sh = e.target.closest('[data-sort]');
+  if (sh) { const k = sh.dataset.sort; if (sortBy === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc'; else { sortBy = k; sortDir = 'asc'; } lsSet('npmd.sort', sortBy); lsSet('npmd.dir', sortDir); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a;
   if (a === 'gtoggle') { setCollapsed(b.dataset.ip, !collapsed.has(b.dataset.ip)); saveCollapsed(); return; }
