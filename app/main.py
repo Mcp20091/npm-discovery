@@ -335,6 +335,14 @@ async def add(rid: int, req: AddReq):
         raise HTTPException(400, "Subdomain may only contain letters, digits and hyphens (dots allowed between labels)")
     domain = f"{sub}.{config.BASE_DOMAIN}"
     cert = req.certificate_id or 0
+    if cert:  # a saved default may point at a certificate that was deleted in NPM since
+        try:
+            known = {c.get("id") for c in await npm.certificates()}
+        except NpmError as e:
+            raise HTTPException(502, str(e))
+        if cert not in known:
+            raise HTTPException(400, f"SSL certificate {cert} no longer exists in NPM - pick another one "
+                                     "(and update the default in Settings)")
     payload = {
         "domain_names": [domain],
         "forward_scheme": row["scheme"],
