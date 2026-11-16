@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import socket
 import time
@@ -10,6 +11,7 @@ import httpx
 
 from . import config, db, macs
 
+log = logging.getLogger("npm-discovery")
 TLS_FIRST = {443, 8443, 8444, 9443, 4443, 5001, 8006, 8007}
 HOSTNAME_RE = re.compile(r"[A-Za-z0-9_]([A-Za-z0-9_.-]{0,251}[A-Za-z0-9_])?")
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
@@ -129,6 +131,10 @@ async def run_scan():
         if not config.SCAN_SUBNETS:
             raise RuntimeError("SCAN_SUBNETS is not set")
         open_ports = await run_nmap()
+        # Linux drops ARP entries quickly once a /24 sweep fills its table, so one read at the very end misses
+        # hosts. Read it after nmap and again right after each probe (the connection just made refreshes the
+        # entry), and merge.
+        arp = macs.read_arp()
         sem = asyncio.Semaphore(3 if config.SCAN_GENTLE else 30)
         names = {}
         async with httpx.AsyncClient(verify=False, timeout=config.PROBE_TIMEOUT,
@@ -138,6 +144,7 @@ async def run_scan():
                     info = await probe(client, ip, port)
                     if not info:
                         return None
+                    arp.update(macs.read_arp())
                     if ip not in names:
                         names[ip] = asyncio.ensure_future(rdns(ip))
                     info.update(ip=ip, port=port, hostname=await names[ip])
@@ -152,9 +159,12 @@ async def run_scan():
                 if isinstance(r, BaseException):
                     raise r
             results = [r for r in done if r]
-        arp = macs.read_arp()  # only hosts on this segment show up
+        arp.update(macs.read_arp())  # only hosts on the same network segment as this container show up
         for r in results:
             r["mac"] = arp.get(r["ip"])
+        log.info("Scan found %d services on %d hosts; MAC known for %d hosts (ARP table had %d entries)",
+                 len(results), len({r["ip"] for r in results}),
+                 len({r["ip"] for r in results if r["mac"]}), len(arp))
         new, gone = db.save_scan_results(results, started, scan_id)
         db.x("UPDATE scans SET status='finished', finished=?, found=?, new_count=?, gone_count=? WHERE id=?",
              (time.time(), len(results), new, gone, scan_id))
