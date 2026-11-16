@@ -66,7 +66,18 @@ small.mut{color:var(--mut)}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let tab = 'new', data = {items: [], npm_error: null}, certs = [], status = {}, rowErr = {};
-const TABS = [['new','New'],['proxied','Already proxied'],['dismissed','Dismissed'],['exclusions','Exclusions'],['settings','Settings']];
+const TABS = [['new','New'],['proxied','Already proxied'],['dismissed','Dismissed'],['exclusions','Exclusions'],['history','History'],['settings','Settings']];
+let hist = [];
+async function loadHistory() { try { hist = (await api('/api/history')).items; } catch {} }
+function dur(s) { if (!s.finished) return '-'; const t = Math.round(s.finished - s.started); return t >= 60 ? `${Math.floor(t / 60)}m ${t % 60}s` : `${t}s`; }
+function renderHistory() {
+  if (!hist.length) { $('#content').innerHTML = '<div class="empty">No scans yet.</div>'; return; }
+  $('#content').innerHTML = `<div class="banner info">The last 100 scans. Click Show to see which services a scan found.</div>
+    <table><thead><tr><th>Started</th><th>Took</th><th>Status</th><th>Found</th><th>New</th><th>Gone</th><th></th></tr></thead><tbody>` +
+    hist.map(s => `<tr><td>${fmt(s.started)}</td><td>${dur(s)}</td><td class="${esc(s.status)}">${esc(s.status)}${s.error ? `<br><span class="err">${esc(s.error)}</span>` : ''}</td>
+      <td>${s.status === 'finished' ? s.found : '-'}</td><td>${s.status === 'finished' ? s.new_count : '-'}</td><td>${s.status === 'finished' ? s.gone_count : '-'}</td>
+      <td>${s.status === 'finished' ? `<button data-a="hshow" data-id="${s.id}">Show</button>` : ''}</td></tr><tr id="h${s.id}" hidden><td colspan="7" class="mut"></td></tr>`).join('') + '</tbody></table>';
+}
 let sett = null, sdirty = false, smsg = {text: '', bad: false};
 async function loadSettings() { try { sett = (await api('/api/settings')).settings; } catch (e) { smsg = {text: e.message, bad: true}; } }
 const FIELDS = [
@@ -105,6 +116,12 @@ function renderSettings() {
        <input type="password" id="pw" autocomplete="new-password" placeholder="New password (at least 8 characters)">
        <small class="mut">Sent unencrypted unless you put this page behind HTTPS. Removing the password needs a logged-in session.</small></label>
      <div class="line"><button data-a="spw">${status.auth ? 'Change password' : 'Set password'}</button>${status.auth ? '<button data-a="spwoff">Remove password</button>' : ''}</div>
+     <h3>Backup &amp; restore</h3>
+     <label class="sf"><span><input type="checkbox" id="bk-res" checked> Include discoveries, dismissals and scan history</span></label>
+     <label class="sf"><span><input type="checkbox" id="bk-sec"> Include passwords (NPM password and web page password)</span><small class="mut">Anyone with the file can read the NPM password. Off by default; you re-enter it after restoring.</small></label>
+     <div class="line"><button data-a="sbackup">Download backup</button></div>
+     <div class="line"><input type="file" id="rf" accept=".json,application/json"><button data-a="srestore">Restore from file</button></div>
+     <small class="mut">Restoring replaces settings, exclusions and, if the file has them, discoveries and history.</small>
      <h3>Maintenance</h3><div class="line"><button data-a="sreset">Reset all to config.env</button><button data-a="srestart">Restart service</button></div>
      <small class="mut">Settings saved here override config.env. Skipped addresses are on the Exclusions tab.</small></div>`;
 }
@@ -162,9 +179,10 @@ async function loadCerts() {
 
 function render() {
   const count = k => k === 'exclusions' ? excl.items.length + excl.from_config.length : data.items.filter(i => i.state === k).length;
-  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}">${n}${k === 'settings' ? '' : ` (${count(k)})`}</div>`).join('');
+  $('#tabs').innerHTML = TABS.map(([k, n]) => `<div class="tab ${k === tab ? 'active' : ''}" data-t="${k}">${n}${k === 'settings' || k === 'history' ? '' : ` (${count(k)})`}</div>`).join('');
   if (tab === 'settings') { if (!sdirty) renderSettings(); return; }
   if (tab === 'exclusions') { renderExcl(); return; }
+  if (tab === 'history') { renderHistory(); return; }
   const items = data.items.filter(i => i.state === tab);
   if (!items.length) { $('#content').innerHTML = `<div class="empty">Nothing here.</div>`; return; }
   const extra = tab === 'proxied' ? '<th>Proxy host</th>' : '<th>Action</th>';
@@ -193,9 +211,19 @@ function row(i) {
     <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td><td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
 }
 
-document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); } render(); return; }
+document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); } if (tab === 'history') await loadHistory(); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a;
+  if (a === 'hshow') {
+    const row = $('#h' + id);
+    if (!row.hidden) { row.hidden = true; return; }
+    try {
+      const items = (await api('/api/history/' + id)).items;
+      row.firstElementChild.innerHTML = items.length ? items.map(i => `${esc(i.ip)}:${i.port} ${esc(i.scheme)} - ${esc(i.title) || '(no title)'}`).join('<br>') : 'No services.';
+      row.hidden = false;
+    } catch (err) { alert(err.message); }
+    return;
+  }
   if (a.startsWith('s')) {
     const msg = (text, bad) => { smsg = {text, bad: !!bad}; const m = $('#smsg'); if (m) { m.className = bad ? 'err' : 'ok'; m.textContent = text; } };
     try {
@@ -208,6 +236,20 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
       } else if (a === 'stest') {
         msg('Testing…'); const r = await api('/api/npm/test', {method: 'POST'});
         msg(`Connected to NPM (${r.proxy_hosts} proxy hosts). Save first if you changed the fields.`);
+      } else if (a === 'sbackup') {
+        const sec = $('#bk-sec').checked;
+        if (sec && !confirm('This file will contain your passwords in readable form. Keep it private. Continue?')) return;
+        location.href = `/api/backup?results=${$('#bk-res').checked}&secrets=${sec}`;
+        msg('Backup downloading.');
+      } else if (a === 'srestore') {
+        const f = $('#rf').files[0]; if (!f) { msg('Choose a backup file first.', true); return; }
+        const text = await f.text(); let d;
+        try { d = JSON.parse(text); } catch { msg('That file is not valid JSON.', true); return; }
+        const parts = ['settings', 'exclusions', 'discoveries', 'scans'].filter(k => k in d);
+        if (!confirm(`Restore from ${f.name}?\nThis replaces: ${parts.join(', ') || 'nothing recognised'}.`)) return;
+        await api('/api/restore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: text});
+        sdirty = false; await Promise.all([loadSettings(), loadExcl(), loadHistory(), loadStatus()]); await loadData(); renderSettings();
+        msg('Restored: ' + parts.join(', ') + '.');
       } else if (a === 'sreset') {
         if (!confirm('Discard everything saved in the web page and go back to config.env?')) return;
         await api('/api/settings', {method: 'DELETE'}); sdirty = false; await loadSettings(); await loadStatus(); await loadData(); renderSettings(); msg('Reset.');
@@ -275,7 +317,7 @@ $('#scan').onclick = async () => {
 let wasRunning = false;
 async function tick() {
   await loadStatus();
-  if (wasRunning && !status.running) { await loadData(); }
+  if (wasRunning && !status.running) { await loadData(); await loadHistory(); }
   wasRunning = status.running;
 }
 (async () => { await loadStatus(); await loadCerts(); await loadExcl(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();

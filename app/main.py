@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import auth, config, db, scanner
+from . import auth, backup, config, db, scanner
 from .npm import NpmClient, NpmError
 
 log = logging.getLogger("npm-discovery")
@@ -75,6 +75,7 @@ async def lifespan(app):
 app = FastAPI(title="NPM Discovery", lifespan=lifespan)
 app.middleware("http")(auth.middleware)
 app.include_router(auth.router)
+app.include_router(backup.router)
 
 
 def suggest(row):
@@ -358,6 +359,15 @@ async def add(rid: int, req: AddReq):
     await refresh_hosts(force=True)
     return {"ok": True, "domain": domain, "id": created.get("id")}
 
+
+def reload_after_restore():
+    global npm
+    load_settings()
+    npm = NpmClient()
+    _cache.update(hosts=None, error=None, at=0.0)
+
+
+backup.hooks.update(normalize=normalize_exclusion, reload=reload_after_restore)
 
 if __name__ == "__main__":
     load_settings()  # so WEB_HOST / WEB_PORT saved in the UI are honoured

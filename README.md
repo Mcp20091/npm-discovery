@@ -96,6 +96,18 @@ systemctl start npm-discovery
 
 Do not expose the web UI to the internet even with a password.
 
+## Backup, restore and history
+
+- **History tab:** the last 100 scans with start time, duration, status, how many services were found,
+  how many were new and how many disappeared. Show lists the services a scan found.
+- **Settings tab, Backup & restore:** Download backup saves one JSON file with your settings and exclusions,
+  and optionally discoveries, dismissals and scan history. Passwords (the NPM password and the web page
+  password) are left out unless you tick the box, because anyone with the file could read them.
+- **Restore from file** replaces the settings and exclusions, and the discoveries and history if the file
+  has them. Saved passwords are kept unless the file carries new ones. The file is checked completely before
+  anything changes, so a bad file changes nothing.
+- Settings that come only from `config.env` are not in the backup; only values saved in the web page are.
+
 ## Logs and service control
 
 ```bash

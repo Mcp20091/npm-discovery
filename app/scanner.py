@@ -149,9 +149,9 @@ async def run_scan():
                 if isinstance(r, BaseException):
                     raise r
             results = [r for r in done if r]
-        db.save_scan_results(results, started)
-        db.x("UPDATE scans SET status='finished', finished=?, found=? WHERE id=?",
-             (time.time(), len(results), scan_id))
+        new, gone = db.save_scan_results(results, started, scan_id)
+        db.x("UPDATE scans SET status='finished', finished=?, found=?, new_count=?, gone_count=? WHERE id=?",
+             (time.time(), len(results), new, gone, scan_id))
     except ScanStopped:
         db.x("UPDATE scans SET status='stopped', finished=? WHERE id=?", (time.time(), scan_id))
     except Exception as e:

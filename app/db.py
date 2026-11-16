@@ -38,7 +38,15 @@ def init():
         CREATE TABLE IF NOT EXISTS scans(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             started REAL, finished REAL, status TEXT, error TEXT, found INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS scan_hits(
+            scan_id INTEGER NOT NULL, ip TEXT NOT NULL, port INTEGER NOT NULL,
+            scheme TEXT, title TEXT, server TEXT, hostname TEXT);
+        CREATE INDEX IF NOT EXISTS scan_hits_scan ON scan_hits(scan_id);
         """)
+        cols = {r["name"] for r in _conn.execute("PRAGMA table_info(scans)")}
+        for c in ("new_count", "gone_count"):  # added after v1: upgrade existing databases
+            if c not in cols:
+                _conn.execute(f"ALTER TABLE scans ADD COLUMN {c} INTEGER DEFAULT 0")
         _conn.execute("UPDATE scans SET status='failed', error='Interrupted by restart', finished=? "
                       "WHERE status='running'", (time.time(),))
         _conn.commit()
@@ -56,10 +64,26 @@ def x(sql, args=()):
         return cur
 
 
-def save_scan_results(results, scan_start):
-    """results: dicts with ip, port, scheme, title, server, hostname. Rows not seen become missing."""
+HISTORY_KEEP = 100  # scans (and their per-scan service lists) kept
+
+
+def save_scan_results(results, scan_start, scan_id=None):
+    """results: dicts with ip, port, scheme, title, server, hostname. Rows not seen become missing.
+    Returns (new_count, gone_count) and records the scan's service list for the History tab."""
     now = time.time()
     with _lock:
+        known = {(r["ip"], r["port"]) for r in _conn.execute("SELECT ip, port FROM discoveries")}
+        new = sum(1 for r in results if (r["ip"], r["port"]) not in known)
+        gone = _conn.execute("SELECT COUNT(*) FROM discoveries WHERE missing=0 AND last_seen < ?",
+                             (scan_start,)).fetchone()[0]
+        if scan_id is not None:
+            _conn.executemany("INSERT INTO scan_hits VALUES(?,?,?,?,?,?,?)",
+                              [(scan_id, r["ip"], r["port"], r["scheme"], r["title"], r["server"], r["hostname"])
+                               for r in results])
+            _conn.execute("DELETE FROM scan_hits WHERE scan_id NOT IN "
+                          "(SELECT id FROM scans ORDER BY id DESC LIMIT ?)", (HISTORY_KEEP,))
+            _conn.execute("DELETE FROM scans WHERE id NOT IN (SELECT id FROM scans ORDER BY id DESC LIMIT ?)",
+                          (HISTORY_KEEP,))
         for r in results:
             _conn.execute("""
                 INSERT INTO discoveries(ip,port,scheme,title,server,hostname,first_seen,last_seen,missing)
@@ -70,3 +94,4 @@ def save_scan_results(results, scan_start):
                          (r["ip"], r["port"], r["scheme"], r["title"], r["server"], r["hostname"], now, now))
         _conn.execute("UPDATE discoveries SET missing=1 WHERE last_seen < ?", (scan_start,))
         _conn.commit()
+    return new, gone
