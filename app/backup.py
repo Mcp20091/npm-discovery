@@ -43,6 +43,7 @@ async def backup(results: bool = True, secrets: bool = False):
                      if secrets or r["key"] not in SECRET_KEYS},
         "exclusions": [r["value"] for r in db.q("SELECT value FROM exclusions ORDER BY id")],
         "host_names": {r["ip"]: r["name"] for r in db.q("SELECT ip, name FROM host_names ORDER BY ip")},
+        "notes": [dict(r) for r in db.q("SELECT kind, key, note FROM notes ORDER BY kind, key")],
     }
     if results:
         out["discoveries"] = db.q("SELECT %s FROM discoveries ORDER BY id" % ",".join(DISC_COLS))
@@ -116,6 +117,33 @@ def _validate(data):
             if name.strip():
                 names.append((ip, name.strip()))
         clean["host_names"] = names
+    if "notes" in data:
+        raw = data["notes"] or []
+        if not isinstance(raw, list):
+            raise HTTPException(400, "Backup has malformed notes")
+        notes = {}
+        for n in raw:
+            if not (isinstance(n, dict) and all(isinstance(n.get(k), str) for k in ("kind", "key", "note"))):
+                raise HTTPException(400, "Backup has a malformed note")
+            if n["kind"] not in ("host", "service"):
+                raise HTTPException(400, "Backup has a note of an unknown kind")
+            ip, sep, port = n["key"].strip().partition(":")
+            try:
+                ip = str(ipaddress.IPv4Address(ip))
+            except ValueError:
+                raise HTTPException(400, f"Backup has a note for an invalid IP: {n['key']}")
+            if n["kind"] == "host":
+                key = ip if not sep else None
+            else:
+                key = f"{ip}:{int(port)}" if port.isascii() and port.isdigit() and 1 <= int(port) <= 65535 else None
+            if key is None:
+                raise HTTPException(400, f"Backup has a note with an invalid key: {n['key']}")
+            text = n["note"].strip()
+            if len(text) > 2000:
+                raise HTTPException(400, f"Backup has a note that is too long: {key}")
+            if text:
+                notes[(n["kind"], key)] = text
+        clean["notes"] = [(k, key, t) for (k, key), t in notes.items()]
     if "discoveries" in data:
         rows = []
         for d in data["discoveries"] or []:
@@ -152,6 +180,9 @@ async def restore(request: Request):
             if "host_names" in clean:
                 c.execute("DELETE FROM host_names")
                 c.executemany("INSERT OR REPLACE INTO host_names VALUES(?,?)", clean["host_names"])
+            if "notes" in clean:
+                c.execute("DELETE FROM notes")
+                c.executemany("INSERT OR REPLACE INTO notes VALUES(?,?,?)", clean["notes"])
             if "discoveries" in clean:
                 c.execute("DELETE FROM discoveries")
                 c.executemany("INSERT OR REPLACE INTO discoveries(%s) VALUES(%s)" % (

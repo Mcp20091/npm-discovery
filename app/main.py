@@ -142,6 +142,7 @@ async def discoveries():
     items = []
     excl = all_exclusions()
     names = {n["ip"]: n["name"] for n in db.q("SELECT ip, name FROM host_names")}
+    notes = {(n["kind"], n["key"]): n["note"] for n in db.q("SELECT kind, key, note FROM notes")}
     for r in db.q("SELECT * FROM discoveries ORDER BY ip, port"):
         if any(excl_covers(s, r["ip"]) for s in excl):
             continue
@@ -150,8 +151,51 @@ async def discoveries():
         r["proxy_domains"] = proxies
         r["suggestion"] = suggest(r)
         r["host_name"] = names.get(r["ip"], "")
+        r["note"] = notes.get(("service", f"{r['ip']}:{r['port']}"), "")
+        r["host_note"] = notes.get(("host", r["ip"]), "")
         items.append(r)
     return {"items": items, "npm_error": _cache["error"]}
+
+
+NOTE_MAX = 2000
+
+
+class NoteReq(BaseModel):
+    kind: str
+    key: str
+    note: str = ""
+
+
+def check_note_key(kind, key):
+    """Returns the canonical key ('ip' for hosts, 'ip:port' for services) or raises 400."""
+    if kind not in ("host", "service"):
+        raise HTTPException(400, "Unknown note kind")
+    ip, sep, port = key.strip().partition(":")
+    try:
+        ip = str(ipaddress.IPv4Address(ip))
+    except ValueError:
+        raise HTTPException(400, "Not a valid IPv4 address")
+    if kind == "host":
+        if sep:
+            raise HTTPException(400, "A host note is keyed by IP only")
+        return ip
+    if not (port.isascii() and port.isdigit() and 1 <= int(port) <= 65535):
+        raise HTTPException(400, "Not a valid port")
+    return f"{ip}:{int(port)}"
+
+
+@app.put("/api/notes")
+async def set_note(req: NoteReq):
+    key = check_note_key(req.kind, req.key)
+    note = req.note.strip()
+    if len(note) > NOTE_MAX:
+        raise HTTPException(400, f"Note is too long (max {NOTE_MAX} characters)")
+    if note:
+        db.x("INSERT INTO notes(kind, key, note) VALUES(?,?,?) ON CONFLICT(kind, key) DO UPDATE SET note=excluded.note",
+             (req.kind, key, note))
+    else:
+        db.x("DELETE FROM notes WHERE kind=? AND key=?", (req.kind, key))
+    return {"ok": True, "kind": req.kind, "key": key, "note": note}
 
 
 class HostNameReq(BaseModel):

@@ -36,6 +36,8 @@ def init():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             value TEXT NOT NULL UNIQUE, added REAL);
         CREATE TABLE IF NOT EXISTS host_names(ip TEXT PRIMARY KEY, name TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS notes(
+            kind TEXT NOT NULL, key TEXT NOT NULL, note TEXT NOT NULL, PRIMARY KEY(kind, key));
         CREATE TABLE IF NOT EXISTS scans(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             started REAL, finished REAL, status TEXT, error TEXT, found INTEGER DEFAULT 0);

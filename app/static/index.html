@@ -76,6 +76,13 @@ tr.ghead td{background:color-mix(in srgb,var(--acc) 7%,var(--card));border-top:2
 button.caret{padding:0 6px;font-size:12px;margin-right:6px;line-height:20px}
 .ipc{font-size:12px;color:var(--mut);font-family:ui-monospace,Consolas,monospace}
 .hn{font-weight:600}
+.note{font-size:13px;color:var(--mut);white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden;margin-top:3px;font-weight:400}
+dialog#notedlg{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:16px 18px;width:min(520px,92vw)}
+dialog#notedlg::backdrop{background:rgba(0,0,0,.5)}
+#notedlg h3{margin:0 0 4px;font-size:16px}
+#notedlg textarea{width:100%;box-sizing:border-box;min-height:140px;resize:vertical;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+#notedlg .btns{display:flex;gap:8px;margin-top:10px;align-items:center}
+#notedlg .btns .sp{flex:1}
 </style>
 </head>
 <body>
@@ -92,6 +99,13 @@ button.caret{padding:0 6px;font-size:12px;margin-right:6px;line-height:20px}
   <div class="tabs" id="tabs"></div>
   <div id="content"></div>
 </main>
+<dialog id="notedlg">
+  <h3 id="nd-title">Note</h3>
+  <div class="mut" id="nd-sub" style="font-size:13px;margin-bottom:8px"></div>
+  <textarea id="nd-text" maxlength="2000" placeholder="Free-text notes (max 2000 characters)"></textarea>
+  <div class="err" id="nd-err"></div>
+  <div class="btns"><button class="primary" id="nd-save">Save</button><button id="nd-cancel">Cancel</button><span class="sp"></span><button id="nd-clear">Clear</button></div>
+</dialog>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -249,17 +263,21 @@ function hostHtml(ip, hn, dns, withIp = true) {
   return `<span class="hn">${esc(main || ip)}</span>${main && withIp ? ` <span class="ipc">${esc(ip)}</span>` : ''}${hn && dns ? ` <small class="mut">${esc(dns)}</small>` : ''}`;
 }
 const renameBtn = (ip, name) => `<button class="small" data-a="rename" data-ip="${esc(ip)}" data-name="${esc(name || '')}" title="Give this host a friendly name (blank clears it)">Rename</button>`;
+// notes: plain text only (esc), line breaks kept by CSS; the full text is the tooltip in case it is clamped
+const noteHtml = n => n ? `<div class="note" title="${esc(n)}">${esc(n)}</div>` : '';
+const noteBtn = (kind, keys, note, label) => `<button class="small" data-a="note" data-kind="${kind}" data-keys="${esc(keys.join(' '))}" data-note="${esc(note || '')}" data-label="${esc(label)}" title="${kind === 'host' ? 'Notes about this host' : 'Notes about this service'}">${note ? 'Edit note' : 'Note'}</button>`;
 function groupHead(key, list) {
   const ips = [...new Set(list.map(i => i.ip))];
   const hn = (list.find(i => i.host_name) || {}).host_name || '', dns = (list.find(i => i.hostname) || {}).hostname || '';
+  const hnote = (list.find(i => i.host_note) || {}).host_note || '';
   const open = !collapsed.has(key);
   const head = ips.length === 1 ? hostHtml(ips[0], hn, dns)
     : `<span class="hn">${esc(hn || dns || ips[0])}</span> ${ips.map(ip => `<span class="ipc">${esc(ip)}</span>`).join(' ')}`;
   return `<tr class="ghead" data-gh="${esc(key)}"><td><input type="checkbox" class="selg" data-ips="${esc(ips.join(' '))}" ${ips.every(ip => sel.has(ip)) ? 'checked' : ''}></td>
     <td colspan="2"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button>${head}
-      <small class="mut"> &middot; ${list.length} service${list.length > 1 ? 's' : ''}</small></td>
+      <small class="mut"> &middot; ${list.length} service${list.length > 1 ? 's' : ''}</small>${noteHtml(hnote)}</td>
     <td>${macHtml(list.find(i => i.mac))}</td>
-    <td colspan="2">${renameBtn(ips.join(' '), hn)}</td></tr>`;
+    <td colspan="2">${renameBtn(ips.join(' '), hn)} ${noteBtn('host', ips, hnote, ips.join(', '))}</td></tr>`;
 }
 function cmpItems(a, b) {
   let r = 0;
@@ -318,13 +336,36 @@ function row(i, grouped, gkey) {
   const hurl = i.hostname ? `${i.scheme}://${i.hostname}:${i.port}/` : '';  // reverse-DNS name, if the scan found one
   const links = `<span class="badge">${esc(i.scheme)}</span><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab"><b>${esc(i.ip)}:${i.port}</b> &#8599;</a>${gone}
       ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}`;
-  const details = `<div class="dt">${i.title ? esc(i.title) : '<span class="mut">-</span>'}</div>${i.server ? `<small class="mut">${esc(i.server)}</small>` : ''}`;
+  const details = `<div class="dt">${i.title ? esc(i.title) : '<span class="mut">-</span>'}</div>${i.server ? `<small class="mut">${esc(i.server)}</small>` : ''} ${noteBtn('service', [`${i.ip}:${i.port}`], i.note, `${i.ip}:${i.port}`)}${noteHtml(i.note)}`;
   const seen = `<span title="First seen ${esc(fmt(i.first_seen))}">${esc(fshort(i.last_seen))}</span>`;
   if (grouped) return `<tr class="svc" data-g="${esc(gkey)}" ${collapsed.has(gkey) ? 'hidden' : ''}><td></td><td>${links}</td><td>${details}</td><td></td><td class="mut">${seen}</td><td>${action}</td></tr>`;
   return `<tr><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
-    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)}</div>${links}</td><td>${details}</td>
+    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)} ${noteBtn('host', [i.ip], i.host_note, i.ip)}</div>${noteHtml(i.host_note)}${links}</td><td>${details}</td>
     <td>${macHtml(i)}</td><td class="mut">${seen}</td><td>${action}</td></tr>`;
 }
+
+// one shared note editor; a host-name group can hold several IPs and the note is saved for each of them
+let noteCtx = null;
+function openNote(kind, keys, note, label) {
+  noteCtx = {kind, keys};
+  $('#nd-title').textContent = (kind === 'host' ? 'Host note' : 'Service note');
+  $('#nd-sub').textContent = label; $('#nd-err').textContent = '';
+  $('#nd-text').value = note; $('#nd-clear').hidden = !note;
+  $('#notedlg').showModal(); $('#nd-text').focus();
+}
+async function saveNote(text) {
+  if (!noteCtx) return;
+  const btns = ['#nd-save', '#nd-clear'].map($); btns.forEach(x => x.disabled = true);
+  try {
+    for (const key of noteCtx.keys) await api('/api/notes', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({kind: noteCtx.kind, key, note: text})});
+    $('#notedlg').close(); await loadData();
+  } catch (err) { $('#nd-err').textContent = err.message; await loadData().catch(() => {}); }
+  btns.forEach(x => x.disabled = false);
+}
+$('#nd-save').onclick = () => saveNote($('#nd-text').value);
+$('#nd-clear').onclick = () => saveNote('');
+$('#nd-cancel').onclick = () => $('#notedlg').close();
+$('#nd-text').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNote($('#nd-text').value); } });
 
 document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); } if (tab === 'history') await loadHistory(); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
@@ -345,6 +386,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
     } catch (err) { alert(err.message); }
     return;
   }
+  if (a === 'note') { openNote(b.dataset.kind, b.dataset.keys.split(' '), b.dataset.note, b.dataset.label); return; }
   if (a === 'hshow') {
     const row = $('#h' + id);
     if (!row.hidden) { row.hidden = true; return; }
@@ -394,7 +436,7 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
         const f = $('#rf').files[0]; if (!f) { msg('Choose a backup file first.', true); return; }
         const text = await f.text(); let d;
         try { d = JSON.parse(text); } catch { msg('That file is not valid JSON.', true); return; }
-        const parts = ['settings', 'exclusions', 'host_names', 'discoveries', 'scans'].filter(k => k in d);
+        const parts = ['settings', 'exclusions', 'host_names', 'notes', 'discoveries', 'scans'].filter(k => k in d);
         if (!confirm(`Restore from ${f.name}?\nThis replaces: ${parts.join(', ') || 'nothing recognised'}.`)) return;
         await api('/api/restore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: text});
         sdirty = false; await Promise.all([loadSettings(), loadExcl(), loadHistory(), loadStatus()]); await loadData(); renderSettings();
