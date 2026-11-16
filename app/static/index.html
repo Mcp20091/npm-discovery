@@ -37,6 +37,7 @@ main{overflow-x:auto}
 .err{color:var(--bad);font-size:12px}
 .empty{padding:30px;text-align:center;color:var(--mut)}
 code{font-size:12px}
+button.small{padding:1px 8px;font-size:12px}
 .sett{max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px 18px}
 .sett h3{margin:18px 0 6px;font-size:14px}
 .sf{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
@@ -92,6 +93,7 @@ const FIELDS = [
     ['SCAN_SUBNETS', 'area', 'Subnets to scan', 'One per line or comma separated, e.g. 192.168.1.0/24'],
     ['BASE_DOMAIN', 'text', 'Base domain', 'Proxy hosts become subdomain.thisdomain, e.g. jellyfin.mydomain.com'],
     ['SCAN_INTERVAL_HOURS', 'number', 'Scan every (hours)', '0 = only when you click Scan now'],
+    ['DEFAULT_CERT_ID', 'cert', 'Default SSL certificate', 'Preselected for every new discovery (you can still change it per row). Needs NPM to be reachable.'],
     ['SCAN_ON_START', 'bool', 'Scan when the service starts', ''],
     ['SCAN_PORTS', 'area', 'Ports to check', 'Comma separated; ranges allowed, e.g. 42000-42009'],
     ['SCAN_ALL_PORTS', 'bool', 'Scan all 65535 ports', 'Much slower and more likely to trigger security software'],
@@ -106,6 +108,7 @@ function renderSettings() {
     const s = sett[k], v = esc(s.value);
     let input;
     if (t === 'bool') input = `<input type="checkbox" data-k="${k}" ${String(s.value).toLowerCase() === 'true' ? 'checked' : ''}>`;
+    else if (t === 'cert') input = `<select data-k="${k}"><option value="0">No default certificate</option>${certs.map(c => `<option value="${c.id}" ${String(c.id) === String(s.value) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
     else if (t === 'area') input = `<textarea data-k="${k}" rows="3">${v}</textarea>`;
     else input = `<input type="${t}" data-k="${k}" value="${v}" ${k === 'NPM_PASSWORD' ? `placeholder="${s.set ? '(saved - leave blank to keep)' : 'not set'}" autocomplete="new-password"` : ''}>`;
     return `<label class="sf"><span class="sl">${label}<small> · ${s.source === 'ui' ? 'saved here' : s.source === 'config' ? 'from config.env' : 'default'}</small></span>${input}<small class="mut">${hint}</small></label>`;
@@ -188,9 +191,38 @@ function render() {
   const items = data.items.filter(i => i.state === tab);
   if (!items.length) { $('#content').innerHTML = `<div class="empty">Nothing here.</div>`; return; }
   const extra = tab === 'proxied' ? '<th>Proxy host</th>' : '<th>Action</th>';
-  $('#content').innerHTML = `<table><thead><tr><th>IP : Port</th><th>Scheme</th><th>Title</th><th>Server</th><th>Hostname</th><th>First / last seen</th>${extra}</tr></thead><tbody>` +
+  const allOn = items.every(i => sel.has(i.ip));
+  const defSel = tab !== 'new' ? '' : `<label style="display:flex;gap:6px;align-items:center;margin-left:auto"><small class="mut">Default certificate</small>
+    <select id="defcert"><option value="0">None</option>${certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>`;
+  $('#content').innerHTML = `<div class="line" style="margin-bottom:10px;align-items:center"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
+    ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}
+    ${defSel}</div>
+    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>IP : Port</th><th>Scheme</th><th>Title</th><th>Server</th><th>Hostname</th><th>MAC</th><th>First / last seen</th>${extra}</tr></thead><tbody>` +
     items.map(row).join('') + '</tbody></table>';
 }
+const sel = new Set();
+const defCertId = () => (sett && sett.DEFAULT_CERT_ID) ? +sett.DEFAULT_CERT_ID.value || 0 : 0;
+document.addEventListener('change', async e => {
+  if (e.target.id !== 'defcert') return;
+  const v = e.target.value;
+  try {
+    await api('/api/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({values: {DEFAULT_CERT_ID: v}})});
+    await loadSettings();
+    document.querySelectorAll('.act .cert').forEach(s => s.value = v);  // no re-render: keeps subdomains you are typing
+  } catch (err) { alert(err.message); }
+});
+function selUi() { const b = document.querySelector('button[data-a=exclsel]'); if (b) { b.disabled = !sel.size; b.textContent = `Exclude selected hosts (${sel.size})`; } }
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'selall') {
+    document.querySelectorAll('.sel').forEach(c => { c.checked = t.checked; t.checked ? sel.add(c.dataset.ip) : sel.delete(c.dataset.ip); });
+    selUi();
+  } else if (t.classList && t.classList.contains('sel')) {
+    document.querySelectorAll('.sel').forEach(c => { if (c.dataset.ip === t.dataset.ip) c.checked = t.checked; });  // exclusions are per host
+    t.checked ? sel.add(t.dataset.ip) : sel.delete(t.dataset.ip);
+    selUi();
+  }
+});
 
 function row(i) {
   const gone = i.missing ? ' <span class="gone" title="Not found in the last scan">GONE</span>' : '';
@@ -198,7 +230,7 @@ function row(i) {
   if (tab === 'proxied') action = esc(i.proxy_domains.join(' | '));
   else if (tab === 'dismissed') action = `<button data-a="restore" data-id="${i.id}">Restore</button>`;
   else {
-    const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
     action = `<div class="act" id="r${i.id}">
       <div class="line"><input type="text" class="sub" value="${esc(i.suggestion)}"><span>.${esc(status.base_domain)}</span></div>
       <div class="line"><label><input type="checkbox" class="be" checked> Block exploits</label>
@@ -209,11 +241,18 @@ function row(i) {
         <button data-a="exclude" data-ip="${esc(i.ip)}" data-id="${i.id}" title="Never scan this IP again">Exclude host</button></div>
       <div class="err">${esc(rowErr[i.id] || '')}</div></div>`;
   }
-  return `<tr><td><b>${esc(i.ip)}</b>:${i.port}${gone}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
-    <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td><td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
+  const url = `${i.scheme}://${i.ip}:${i.port}/`;
+  const hurl = i.hostname ? `${i.scheme}://${i.hostname}:${i.port}/` : '';  // reverse-DNS name, if the scan found one
+  return `<tr><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
+    <td><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(url)} in a new tab"><b>${esc(i.ip)}</b>:${i.port} &#8599;</a>${gone}
+      ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}</td><td>${esc(i.scheme)}</td><td>${esc(i.title) || '<span class="mut">-</span>'}</td>
+    <td>${esc(i.server)}</td><td>${esc(i.hostname)}</td>
+    <td>${i.mac ? `<code>${esc(i.mac)}</code><br>${i.vendor ? esc(i.vendor) : `<button data-a="vendor" data-id="${i.id}" class="small">Look up</button>`}`
+      : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>'}</td>
+    <td class="mut">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td><td>${action}</td></tr>`;
 }
 
-document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); } if (tab === 'history') await loadHistory(); render(); return; }
+document.addEventListener('click', async e => {  const t = e.target.closest('.tab'); if (t) { tab = t.dataset.t; sdirty = false; sel.clear(); if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); } if (tab === 'history') await loadHistory(); render(); return; }
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a;
   if (a === 'hshow') {
@@ -224,6 +263,24 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
       row.firstElementChild.innerHTML = items.length ? items.map(i => `${esc(i.ip)}:${i.port} ${esc(i.scheme)} - ${esc(i.title) || '(no title)'}`).join('<br>') : 'No services.';
       row.hidden = false;
     } catch (err) { alert(err.message); }
+    return;
+  }
+  if (a === 'vendor' || a === 'vendorall') {
+    b.disabled = true;
+    try { await api(a === 'vendor' ? `/api/discoveries/${id}/vendor` : '/api/vendors/lookup', {method: 'POST'}); await loadData(); }
+    catch (err) { alert(err.message); b.disabled = false; }
+    return;
+  }
+  if (a === 'exclsel') {
+    const ips = [...sel]; if (!ips.length) return;
+    if (!confirm(`Exclude ${ips.length} host${ips.length > 1 ? 's' : ''} (${ips.slice(0, 5).join(', ')}${ips.length > 5 ? ', …' : ''})?\nThey will be skipped by all future scans and removed from these lists.`)) return;
+    const failed = [];
+    for (const ip of ips) {
+      try { await api('/api/exclusions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value: ip})}); }
+      catch (err) { failed.push(ip + ': ' + err.message); }
+    }
+    sel.clear(); await loadExcl(); await loadData();
+    if (failed.length) alert('Some could not be excluded:\n' + failed.join('\n'));
     return;
   }
   if (a.startsWith('s')) {
@@ -322,7 +379,7 @@ async function tick() {
   if (wasRunning && !status.running) { await loadData(); await loadHistory(); }
   wasRunning = status.running;
 }
-(async () => { await loadStatus(); await loadCerts(); await loadExcl(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();
+(async () => { await loadStatus(); await loadCerts(); await loadSettings(); await loadExcl(); await loadData(); setInterval(tick, 3000); setInterval(() => { if (!document.activeElement.closest('.act')) loadData(); }, 60000); })();
 </script>
 </body>
 </html>

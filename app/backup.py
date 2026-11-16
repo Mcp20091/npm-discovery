@@ -18,7 +18,7 @@ router = APIRouter()
 hooks = {}
 FORMAT = 1
 SECRET_KEYS = {"NPM_PASSWORD", "_auth_hash"}
-DISC_COLS = ("ip", "port", "scheme", "title", "server", "hostname", "first_seen", "last_seen", "dismissed", "missing")
+DISC_COLS = ("ip", "port", "scheme", "title", "server", "hostname", "first_seen", "last_seen", "dismissed", "missing", "mac", "vendor")
 SCAN_COLS = ("id", "started", "finished", "status", "error", "found", "new_count", "gone_count")
 HIT_COLS = ("scan_id", "ip", "port", "scheme", "title", "server", "hostname")
 

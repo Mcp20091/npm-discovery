@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
-from . import config, db
+from . import config, db, macs
 
 TLS_FIRST = {443, 8443, 8444, 9443, 4443, 5001, 8006, 8007}
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
@@ -149,6 +149,9 @@ async def run_scan():
                 if isinstance(r, BaseException):
                     raise r
             results = [r for r in done if r]
+        arp = macs.read_arp()  # only hosts on this segment show up
+        for r in results:
+            r["mac"] = arp.get(r["ip"])
         new, gone = db.save_scan_results(results, started, scan_id)
         db.x("UPDATE scans SET status='finished', finished=?, found=?, new_count=?, gone_count=? WHERE id=?",
              (time.time(), len(results), new, gone, scan_id))

@@ -47,6 +47,10 @@ def init():
         for c in ("new_count", "gone_count"):  # added after v1: upgrade existing databases
             if c not in cols:
                 _conn.execute(f"ALTER TABLE scans ADD COLUMN {c} INTEGER DEFAULT 0")
+        dcols = {r["name"] for r in _conn.execute("PRAGMA table_info(discoveries)")}
+        for c in ("mac", "vendor"):
+            if c not in dcols:
+                _conn.execute(f"ALTER TABLE discoveries ADD COLUMN {c} TEXT")
         _conn.execute("UPDATE scans SET status='failed', error='Interrupted by restart', finished=? "
                       "WHERE status='running'", (time.time(),))
         _conn.commit()
@@ -86,12 +90,16 @@ def save_scan_results(results, scan_start, scan_id=None):
                           (HISTORY_KEEP,))
         for r in results:
             _conn.execute("""
-                INSERT INTO discoveries(ip,port,scheme,title,server,hostname,first_seen,last_seen,missing)
-                VALUES(?,?,?,?,?,?,?,?,0)
+                INSERT INTO discoveries(ip,port,scheme,title,server,hostname,first_seen,last_seen,missing,mac)
+                VALUES(?,?,?,?,?,?,?,?,0,?)
                 ON CONFLICT(ip,port) DO UPDATE SET scheme=excluded.scheme, title=excluded.title,
                   server=excluded.server, hostname=excluded.hostname,
-                  last_seen=excluded.last_seen, missing=0""",
-                         (r["ip"], r["port"], r["scheme"], r["title"], r["server"], r["hostname"], now, now))
+                  last_seen=excluded.last_seen, missing=0,
+                  vendor=CASE WHEN excluded.mac IS NOT NULL AND excluded.mac IS NOT discoveries.mac
+                              THEN NULL ELSE vendor END,
+                  mac=COALESCE(excluded.mac, mac)""",
+                         (r["ip"], r["port"], r["scheme"], r["title"], r["server"], r["hostname"], now, now,
+                          r.get("mac")))
         _conn.execute("UPDATE discoveries SET missing=1 WHERE last_seen < ?", (scan_start,))
         _conn.commit()
     return new, gone

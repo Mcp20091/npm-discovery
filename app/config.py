@@ -23,6 +23,7 @@ SPEC = {
     "SCAN_ALL_PORTS": ("bool", "false"),
     "SCAN_GENTLE": ("bool", "false"),
     "PROBE_TIMEOUT": ("float", "5"),
+    "DEFAULT_CERT_ID": ("certid", "0"),  # NPM certificate preselected in the New tab; 0 = none
     "WEB_HOST": ("str", "0.0.0.0"),
     "WEB_PORT": ("int", "8080"),
 }
@@ -67,6 +68,10 @@ def parse(name, s):
         if not 1 <= v <= 65535:
             raise ValueError(f"{name}: must be 1-65535")
         return v
+    if kind == "certid":
+        if not s.isdigit():
+            raise ValueError(f"{name}: must be a certificate id (0 = none)")
+        return int(s)
     if kind == "float":
         try:
             v = float(s or 0)

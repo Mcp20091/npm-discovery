@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import auth, backup, config, db, scanner
+from . import auth, backup, config, db, macs, scanner
 from .npm import NpmClient, NpmError
 
 log = logging.getLogger("npm-discovery")
@@ -76,6 +76,7 @@ app = FastAPI(title="NPM Discovery", lifespan=lifespan)
 app.middleware("http")(auth.middleware)
 app.include_router(auth.router)
 app.include_router(backup.router)
+app.include_router(macs.router)
 
 
 def suggest(row):
