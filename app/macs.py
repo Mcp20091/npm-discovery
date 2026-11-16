@@ -229,10 +229,11 @@ def _ask_maclookup(oui):
 ONLINE = {"macvendors": ("api.macvendors.com", _ask_macvendors), "maclookup": ("api.maclookup.app", _ask_maclookup)}
 
 
-def _online(provider, oui_hex):
-    """Cached online lookup of one prefix. Returns the vendor or None; raises ProviderError / RateLimited."""
+def _online(provider, oui_hex, retry=False):
+    """Cached online lookup of one prefix. Returns the vendor or None; raises ProviderError / RateLimited.
+    retry=True asks again even if the provider recently said it does not know the prefix."""
     row = db.q("SELECT vendor, ts FROM oui_cache WHERE oui=? AND provider=?", (oui_hex, provider))
-    if row and (row[0]["vendor"] or time.time() - (row[0]["ts"] or 0) < NEG_TTL):
+    if row and (row[0]["vendor"] or (not retry and time.time() - (row[0]["ts"] or 0) < NEG_TTL)):
         return row[0]["vendor"]
     global _last_online
     host, fn = ONLINE[provider]
@@ -273,7 +274,7 @@ class Batch:
             self.warnings.append(msg)
 
 
-def resolve(oui_hex, batch):
+def resolve(oui_hex, batch, retry=False):
     """-> (vendor, source, complete). vendor None = no provider knew it; complete False = at least one enabled
     provider could not be asked, so 'unknown' is not a reliable answer."""
     if int(oui_hex[1], 16) & 0x2:  # locally administered bit: phones randomise their MAC
@@ -292,7 +293,7 @@ def resolve(oui_hex, batch):
             elif p == "ieee":
                 v = _ieee_map().get(oui_hex)
             else:
-                v = _online(p, oui_hex)
+                v = _online(p, oui_hex, retry)
         except ProviderError as e:
             label = ONLINE[p][0] if p in ONLINE else p
             batch.warn(f"{label}: {e}")
@@ -309,8 +310,11 @@ def _store(rid_list, vendor, source):
         db.x("UPDATE discoveries SET vendor=?, vendor_source=? WHERE id=?", (vendor, source, rid))
 
 
+UNKNOWN = "Unknown vendor"  # stored when no provider knew the prefix (vendor_source stays NULL)
+
+
 @router.post("/api/discoveries/{rid}/vendor")
-def lookup_one(rid: int):
+def lookup_one(rid: int, retry: bool = False):
     rows = db.q("SELECT id, mac FROM discoveries WHERE id=?", (rid,))
     if not rows:
         raise HTTPException(404, "Unknown discovery")
@@ -321,18 +325,21 @@ def lookup_one(rid: int):
         raise HTTPException(400, "No MAC lookup provider is enabled (Settings > MAC address lookup)")
     b = Batch()
     try:
-        v, src, complete = resolve(h[:6], b)
+        v, src, complete = resolve(h[:6], b, retry)
     except RateLimited as e:
         raise HTTPException(429, str(e))
     if v is None and not complete:
         raise HTTPException(502, "Could not look up this vendor: " + "; ".join(b.warnings))
-    _store([rid], v or "Unknown vendor", src)
-    return {"vendor": v or "Unknown vendor", "source": src, "warnings": b.warnings}
+    # the vendor is per MAC prefix, so every service on this host gets the same answer
+    _store([r["id"] for r in db.q("SELECT id FROM discoveries WHERE mac=?", (rows[0]["mac"],))], v or UNKNOWN, src)
+    return {"vendor": v or UNKNOWN, "source": src, "warnings": b.warnings}
 
 
 @router.post("/api/vendors/lookup")
-def lookup_all():
-    rows = db.q("SELECT id, mac FROM discoveries WHERE mac IS NOT NULL AND vendor IS NULL")
+def lookup_all(retry: bool = False):
+    """Looks up MACs without a vendor; retry=True also asks again for the ones no provider knew."""
+    rows = db.q("SELECT id, mac FROM discoveries WHERE mac IS NOT NULL AND (vendor IS NULL"
+                + (" OR (vendor=? AND vendor_source IS NULL))" if retry else ")"), (UNKNOWN,) if retry else ())
     by_oui = {}
     for r in rows:
         h = norm_mac(r["mac"])
@@ -341,21 +348,22 @@ def lookup_all():
     if not config.MAC_PROVIDERS and any(int(o[1], 16) & 2 == 0 for o in by_oui):
         raise HTTPException(400, "No MAC lookup provider is enabled (Settings > MAC address lookup)")
     b = Batch()
-    done = 0
+    done = found = 0
     for oui, ids in by_oui.items():
         try:
-            v, src, complete = resolve(oui, b)
+            v, src, complete = resolve(oui, b, retry)
         except RateLimited as e:
             b.stopped = str(e)
             break
         if v is None and not complete:
             continue
-        _store(ids, v or "Unknown vendor", src)
+        _store(ids, v or UNKNOWN, src)
         done += len(ids)
+        found += len(ids) if v else 0
     warnings = list(b.warnings)
     if b.stopped:
         warnings.insert(0, b.stopped)
-    return {"looked_up": done, "not_looked_up": sum(len(v) for v in by_oui.values()) - done, "warnings": warnings}
+    return {"looked_up": done, "found": found, "not_looked_up": sum(len(v) for v in by_oui.values()) - done, "warnings": warnings}
 
 
 # ---------- IEEE list download ----------

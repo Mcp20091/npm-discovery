@@ -43,7 +43,8 @@ button.small{padding:3px 10px;font-size:13px}
 :focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 input[type=text],input[type=password],input[type=number],input[type=search],textarea,select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
 select{max-width:280px;text-overflow:ellipsis}
-main{padding:16px 20px;max-width:1800px;margin:auto;overflow-x:auto}
+main{padding:16px 20px;max-width:1800px;margin:auto}
+.tw{overflow-x:auto;max-width:100%;padding:0 2px 4px;margin:0 -2px}
 /* tabs */
 .tabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
 .tab{padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--mut);display:flex;align-items:center;gap:6px;user-select:none}
@@ -106,7 +107,11 @@ button.caret{padding:0 6px;font-size:12px;margin-right:6px;line-height:20px}
 .sett input[type=text],.sett input[type=password],.sett input[type=number],.sett textarea{width:100%}
 .sett input[type=checkbox]{align-self:flex-start}
 .sett .line{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}
-.sett #smsg{min-height:1.4em}
+.savebar{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:16px -18px 0;padding:12px 18px;background:var(--card);border-top:1px solid var(--line)}
+.savebar .dmsg{display:none;color:var(--warn);font-size:13px;font-weight:600}
+.savebar.dirty{box-shadow:0 -6px 16px rgba(0,0,0,.12)}
+.savebar.dirty .dmsg{display:inline}
+.savebar #smsg{font-size:13px}
 /* history log */
 .slog{font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;padding:6px 4px}
 .l-warn{color:var(--warn)}.l-error{color:var(--bad)}
@@ -205,11 +210,11 @@ function dur(s) { if (!s.finished) return '-'; const t = Math.round(s.finished -
 function renderHistory() {
   if (!hist.length) { $('#content').innerHTML = '<div class="empty"><b>No scans yet</b>Click Scan now to run the first one.</div>'; return; }
   $('#content').innerHTML = `<div class="banner info">The last 100 scans. Services lists what a scan found; Log shows how the scan ran: the nmap command, warnings, and any ports that did not answer (possible firewall or security-software blocks).</div>
-    <table><thead><tr><th>Started</th><th>Took</th><th>Status</th><th>Found</th><th>New</th><th>Gone</th><th></th></tr></thead><tbody>` +
+    <div class="tw"><table><thead><tr><th>Started</th><th>Took</th><th>Status</th><th>Found</th><th>New</th><th>Gone</th><th></th></tr></thead><tbody>` +
     hist.map(s => `<tr><td>${fmt(s.started)}</td><td>${dur(s)}</td><td class="${esc(s.status)}">${esc(s.status)}${s.error ? `<br><span class="err">${esc(s.error)}</span>` : ''}</td>
       <td>${s.status === 'finished' ? s.found : '-'}</td><td>${s.status === 'finished' ? s.new_count : '-'}</td><td>${s.status === 'finished' ? s.gone_count : '-'}</td>
       <td>${s.status === 'finished' ? `<button data-a="hshow" data-id="${s.id}" class="small">Services</button> ` : ''}<button data-a="hlog" data-id="${s.id}" class="small">Log</button></td></tr>
-      <tr id="h${s.id}" hidden><td colspan="7" class="mut"></td></tr><tr id="l${s.id}" hidden><td colspan="7"></td></tr>`).join('') + '</tbody></table>';
+      <tr id="h${s.id}" hidden><td colspan="7" class="mut"></td></tr><tr id="l${s.id}" hidden><td colspan="7"></td></tr>`).join('') + '</tbody></table></div>';
 }
 let sett = null, sdirty = false, smsg = {text: '', bad: false}, ieee = {exists: false};
 async function loadSettings() {
@@ -268,8 +273,8 @@ function renderSettings() {
     return `<label class="sf"><span class="sl">${label}<small> · ${s.source === 'ui' ? 'saved here' : s.source === 'config' ? 'from config.env' : 'default'}</small></span>${input}<small class="mut">${hint}</small></label>`;
   };
   $('#content').innerHTML = `<div class="sett">` + FIELDS.map(([g, fs]) => `<h3>${g}</h3>${fs.map(field).join('')}`).join('') +
-    `<div class="line"><button class="primary" data-a="ssave">Save</button><button data-a="stest">Test NPM connection</button></div>
-     <div class="${smsg.bad ? 'err' : 'ok'}" id="smsg">${esc(smsg.text)}</div>
+    `<div class="savebar ${sdirty ? 'dirty' : ''}" id="savebar"><button class="primary" data-a="ssave" title="Ctrl+S">Save changes</button><button data-a="stest">Test NPM connection</button>
+       <span class="dmsg">Unsaved changes</span><span class="${smsg.bad ? 'err' : 'ok'}" id="smsg">${esc(smsg.text)}</span></div>
      <h3>Web page password</h3>
      <label class="sf"><span class="sl">${status.auth ? 'Change password' : 'Set a password'}<small> · ${status.auth ? 'enabled' : 'off - anyone on the network can open this page'}</small></span>
        <input type="password" id="pw" autocomplete="new-password" placeholder="New password (at least 8 characters)">
@@ -287,7 +292,13 @@ function renderSettings() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.id === 'exv') { e.preventDefault(); document.querySelector('button[data-a=addexcl]').click(); }
 });
-document.addEventListener('input', e => { if (e.target.closest('.sett')) sdirty = true; });
+// only the fields saved by "Save changes" count; password, backup and restore controls have their own buttons
+const setDirty = on => { sdirty = on; const bar = $('#savebar'); if (bar) bar.classList.toggle('dirty', on); if (on) { const m = $('#smsg'); if (m) m.textContent = ''; } };
+document.addEventListener('input', e => { if (e.target.closest('.sett') && e.target.closest('[data-k],[data-prov]')) setDirty(true); });
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && tab === 'settings') { e.preventDefault(); const b = document.querySelector('[data-a=ssave]'); if (b) b.click(); }
+});
+addEventListener('beforeunload', e => { if (tab === 'settings' && sdirty) { e.preventDefault(); e.returnValue = ''; } });
 let excl = {items: [], from_config: []}, exclErr = '';
 async function loadExcl() { try { excl = await api('/api/exclusions'); } catch {} }
 function renderExcl() {
@@ -296,7 +307,7 @@ function renderExcl() {
   $('#content').innerHTML = `<div class="banner info">These addresses are skipped by every scan. Use it for your router, PC or anything that objects to port scans. Takes effect on the next scan.</div>
     <div class="act" style="flex-direction:row;margin-bottom:12px;width:auto"><input type="text" id="exv" placeholder="192.168.1.5   192.168.1.50-60   192.168.1.128/28" style="max-width:380px">
     <button class="primary" data-a="addexcl">Add</button></div><div class="err" style="margin-bottom:8px">${esc(exclErr)}</div>` +
-    (rows.length ? `<table><thead><tr><th>Skipped address</th><th>Source</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty"><b>No exclusions</b>Every address in your subnets is scanned.</div>');
+    (rows.length ? `<div class="tw"><table><thead><tr><th>Skipped address</th><th>Source</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>` : '<div class="empty"><b>No exclusions</b>Every address in your subnets is scanned.</div>');
 }
 
 const fmt = t => t ? new Date(t*1000).toLocaleString() : '-';
@@ -379,10 +390,11 @@ function render() {
     <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}${so('title', sortBy, 'Details')}${so('mac', sortBy, 'MAC')}${so('seen', sortBy, 'Last seen')}</select>
       <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Asc' : '&#9660; Desc'}</button></label>
     ${groupMode !== 'none' ? '<button data-a="collapseall" class="small ghost">Collapse all</button><button data-a="expandall" class="small ghost">Expand all</button>' : ''}
+    ${all.some(isUnknown) ? `<button data-a="vendorall" data-retry="1" class="small" title="Ask the enabled providers again for MACs no provider knew, e.g. after enabling another provider or downloading the IEEE list">Retry unknown vendors (${new Set(all.filter(isUnknown).map(i => i.mac)).size})</button>` : ''}
     ${all.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" class="small" title="Uses the providers enabled in Settings. Online providers only receive the first 3 bytes of each MAC, once per vendor prefix">Look up MAC vendors</button>' : ''}</div>
     <div class="toolbar" id="selbar"></div>
-    ${items.length ? `<table><thead><tr><th><input type="checkbox" id="selall" title="Select all shown" aria-label="Select all shown" ${allOn ? 'checked' : ''}></th><th>${sortHead('name', 'Host')} / ${sortHead('ip', 'IP')} / service</th><th class="det">${sortHead('title', 'Details')}</th><th>${sortHead('mac', 'MAC')}</th><th>${sortHead('seen', 'Last seen')}</th><th>${tab === 'proxied' ? 'Proxy host' : 'Action'}</th></tr></thead><tbody>` +
-    tableBody(items) + '</tbody></table>' : `<div class="empty"><b>No matches</b>Nothing on this tab matches “${esc(query)}”.</div>`}`;
+    ${items.length ? `<div class="tw"><table><thead><tr><th><input type="checkbox" id="selall" title="Select all shown" aria-label="Select all shown" ${allOn ? 'checked' : ''}></th><th>${sortHead('name', 'Host')} / ${sortHead('ip', 'IP')} / service</th><th class="det">${sortHead('title', 'Details')}</th><th>${sortHead('mac', 'MAC')}</th><th>${sortHead('seen', 'Last seen')}</th><th>${tab === 'proxied' ? 'Proxy host' : 'Action'}</th></tr></thead><tbody>` +
+    tableBody(items) + '</tbody></table></div>' : `<div class="empty"><b>No matches</b>Nothing on this tab matches “${esc(query)}”.</div>`}`;
   bulkHtml = bulk; selUi();
   if (qf !== null) { const el = $('#q'); el.focus(); el.setSelectionRange(qf, qf); }
 }
@@ -396,7 +408,9 @@ const SORTS = ['ip', 'name', 'title', 'mac', 'seen'];
 let sortBy = SORTS.includes(lsGet('npmd.sort')) ? lsGet('npmd.sort') : 'ip';
 let sortDir = lsGet('npmd.dir') === 'desc' ? 'desc' : 'asc';
 const dispName = i => i.host_name || i.hostname || '';
-const macHtml = m => m && m.mac ? `<code>${esc(m.mac)}</code><br>${m.vendor ? `<span ${m.vendor_source && SOURCES[m.vendor_source] ? `title="Source: ${esc(SOURCES[m.vendor_source])}"` : ''}>${esc(m.vendor)}</span>` : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}`
+const isUnknown = i => i.vendor === 'Unknown vendor' && !i.vendor_source;  // no provider knew it last time
+const macHtml = m => m && m.mac ? `<code>${esc(m.mac)}</code><br>${isUnknown(m) ? `<span class="mut">Unknown vendor</span> <button data-a="vendor" data-retry="1" data-id="${m.id}" class="small ghost" title="Ask the enabled providers again (also asks online providers that said they did not know it)">Retry</button>`
+    : m.vendor ? `<span ${m.vendor_source && SOURCES[m.vendor_source] ? `title="Source: ${esc(SOURCES[m.vendor_source])}"` : ''}>${esc(m.vendor)}</span>` : `<button data-a="vendor" data-id="${m.id}" class="small">Look up</button>`}`
   : '<span class="mut" title="MAC addresses are only visible for devices on the same network segment as this container">-</span>';
 const collapsed = new Set((() => { try { return JSON.parse(lsGet('npmd.collapsed') || '[]'); } catch { return []; } })());
 const saveCollapsed = () => lsSet('npmd.collapsed', JSON.stringify([...collapsed]));
@@ -446,14 +460,13 @@ function cmpItems(a, b) {
 const sortInd = k => sortBy === k ? (sortDir === 'asc' ? ' &#9650;' : ' &#9660;') : '';
 const sortHead = (k, label) => `<span class="sh" data-sort="${k}" title="Sort by ${label.toLowerCase()} (click again to reverse)">${label}${sortInd(k)}</span>`;
 // vendor groups: known vendors A-Z, then MACs not looked up yet, then hosts without a MAC
-const NOVEND = ['v:~1', 'v:~2'];
-const vendorKey = i => i.vendor ? 'v:' + i.vendor : i.mac ? NOVEND[0] : NOVEND[1];
+const NOVEND = ['v:~0', 'v:~1', 'v:~2'];
+const vendorKey = i => isUnknown(i) ? NOVEND[0] : i.vendor ? 'v:' + i.vendor : i.mac ? NOVEND[1] : NOVEND[2];
 function vendorHead(key, list) {
   const ips = [...new Set(list.map(i => i.ip))], open = !collapsed.has(key);
-  const label = key === NOVEND[0] ? 'Vendor not looked up yet' : key === NOVEND[1] ? 'No MAC address'
-    : key.slice(2);
-  const hint = key === NOVEND[0] ? ' <small class="mut">(use Look up MAC vendors)</small>'
-    : key === NOVEND[1] ? ' <small class="mut">(hosts on another network segment)</small>' : '';
+  const label = ['Unknown vendor', 'Vendor not looked up yet', 'No MAC address'][NOVEND.indexOf(key)] || key.slice(2);
+  const hint = [' <small class="mut">(no provider knew it; use Retry)</small>', ' <small class="mut">(use Look up MAC vendors)</small>',
+    ' <small class="mut">(hosts on another network segment)</small>'][NOVEND.indexOf(key)] || '';
   return `<tr class="ghead" data-gh="${esc(key)}"><td><input type="checkbox" class="selg" data-ips="${esc(ips.join(' '))}" ${ips.every(ip => sel.has(ip)) ? 'checked' : ''}></td>
     <td colspan="5"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button><span class="hn">${esc(label)}</span>${hint}
       <small class="mut"> &middot; ${ips.length} host${ips.length > 1 ? 's' : ''}, ${list.length} service${list.length > 1 ? 's' : ''}</small></td></tr>`;
@@ -578,6 +591,10 @@ async function bulk(ids, path, verb) {  // run one POST per discovery, then repo
   if (failed.length) toast(`${failed.length} failed: ${failed[0]}`, 'bad');
 }
 async function switchTab(k) {
+  if (tab === 'settings' && sdirty && k !== 'settings' && !confirm('You have unsaved settings changes. Leave without saving?')) {
+    try { history.replaceState(null, '', '#settings'); } catch {}
+    return;
+  }
   tab = k; sdirty = false; sel.clear();
   try { history.replaceState(null, '', '#' + k); } catch {}
   if (tab === 'settings') { smsg = {text: '', bad: false}; await loadSettings(); if (!certs.length) await loadCerts(); }
@@ -657,8 +674,11 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
   if (a === 'vendor' || a === 'vendorall') {
     b.disabled = true;
     try {
-      const r = await api(a === 'vendor' ? `/api/discoveries/${id}/vendor` : '/api/vendors/lookup', {method: 'POST'});
+      const rt = b.dataset.retry ? '?retry=true' : '';
+      const r = await api((a === 'vendor' ? `/api/discoveries/${id}/vendor` : '/api/vendors/lookup') + rt, {method: 'POST'});
       await loadData();
+      if (rt && a === 'vendor') toast(r.vendor === 'Unknown vendor' ? 'Still unknown: none of the enabled providers knows this MAC prefix.' : 'Found: ' + r.vendor, r.vendor === 'Unknown vendor' ? 'warn' : 'ok');
+      else if (rt) toast(`Asked again for ${r.looked_up} service${r.looked_up === 1 ? '' : 's'}: ${r.found} now have a vendor.`, r.found ? 'ok' : 'warn');
       if (r.warnings && r.warnings.length) toast('MAC lookup notes:\n' + r.warnings.join('\n'), 'warn');
     }
     catch (err) { toast(err.message, 'bad'); b.disabled = false; }
