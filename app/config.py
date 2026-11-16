@@ -22,6 +22,7 @@ SPEC = {
     "SCAN_ON_START": ("bool", "false"),
     "SCAN_PORTS": ("ports", DEFAULT_PORTS),
     "SCAN_ALL_PORTS": ("bool", "false"),
+    "SCAN_GENTLE": ("bool", "false"),
     "PROBE_TIMEOUT": ("float", "5"),
     "WEB_HOST": ("str", "0.0.0.0"),
     "WEB_PORT": ("int", "8080"),

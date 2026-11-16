@@ -80,6 +80,7 @@ const FIELDS = [
     ['SCAN_ON_START', 'bool', 'Scan when the service starts', ''],
     ['SCAN_PORTS', 'area', 'Ports to check', 'Comma separated'],
     ['SCAN_ALL_PORTS', 'bool', 'Scan all 65535 ports', 'Much slower and more likely to trigger security software'],
+    ['SCAN_GENTLE', 'bool', 'Gentle scan', 'Slower (rate-limited, few parallel probes) but less likely to trigger security software or upset the network'],
     ['PROBE_TIMEOUT', 'number', 'Probe timeout (seconds)', '']]],
   ['Web page', [
     ['WEB_HOST', 'text', 'Listen address', 'Needs a service restart'],

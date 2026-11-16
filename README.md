@@ -59,6 +59,7 @@ only by the service user) and is never sent back to the browser.
 | `BASE_DOMAIN` | required | Proxy hosts become `<subdomain>.<BASE_DOMAIN>` |
 | `SCAN_INTERVAL_HOURS` | `0` | Scheduled scan interval; `0` disables scheduling |
 | `SCAN_ON_START` | `false` | Scan shortly after service start |
+| `SCAN_GENTLE` | `false` | Slower, rate-limited scan (nmap `-T2`, 20 packets/s, 5 parallel; 3 parallel HTTP probes) that is less likely to trigger security software |
 | `SCAN_PORTS` | common homelab list | Ports to check |
 | `SCAN_ALL_PORTS` | `false` | Scan all 65535 ports (slow) |
 | `PROBE_TIMEOUT` | `5` | Seconds per HTTP/HTTPS probe |
