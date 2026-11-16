@@ -80,7 +80,7 @@ const FIELDS = [
     ['BASE_DOMAIN', 'text', 'Base domain', 'Proxy hosts become subdomain.thisdomain, e.g. jellyfin.mydomain.com'],
     ['SCAN_INTERVAL_HOURS', 'number', 'Scan every (hours)', '0 = only when you click Scan now'],
     ['SCAN_ON_START', 'bool', 'Scan when the service starts', ''],
-    ['SCAN_PORTS', 'area', 'Ports to check', 'Comma separated'],
+    ['SCAN_PORTS', 'area', 'Ports to check', 'Comma separated; ranges allowed, e.g. 42000-42009'],
     ['SCAN_ALL_PORTS', 'bool', 'Scan all 65535 ports', 'Much slower and more likely to trigger security software'],
     ['SCAN_GENTLE', 'bool', 'Gentle scan', 'Slower (rate-limited, few parallel probes) but less likely to trigger security software or upset the network'],
     ['PROBE_TIMEOUT', 'number', 'Probe timeout (seconds)', '']]],

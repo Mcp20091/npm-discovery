@@ -7,7 +7,7 @@ import os
 
 DATA_DIR = os.environ.get("DATA_DIR", "/var/lib/npm-discovery")
 
-DEFAULT_PORTS = "80,81,443,1880,2283,2342,3000,3001,3002,3030,3333,4000,4200,4533,5000,5001,5006,5055,5173,5230,5380,5601,5678,6052,6767,7474,7575,7860,7861,7878,8000,8001,8006,8007,8008,8010,8080,8081,8082,8083,8086,8088,8096,8112,8123,8181,8188,8191,8200,8384,8443,8444,8500,8501,8686,8787,8888,8920,8989,9000,9001,9090,9091,9117,9443,9696,10000,13378,19999,32400,42000"
+DEFAULT_PORTS = "80,81,443,1880,2283,2342,3000,3001,3002,3030,3333,4000,4200,4533,5000,5001,5006,5055,5173,5230,5380,5601,5678,6052,6767,7474,7575,7860,7861,7878,8000,8001,8006,8007,8008,8010,8080,8081,8082,8083,8086,8088,8096,8112,8123,8181,8188,8191,8200,8384,8443,8444,8500,8501,8686,8787,8888,8920,8989,9000,9001,9090,9091,9117,9443,9696,10000,13378,19999,32400,42000-42009"
 
 # name: (type, default as string)
 SPEC = {
@@ -81,9 +81,14 @@ def parse(name, s):
             p = p.strip()
             if not p:
                 continue
-            if not p.isdigit() or not 1 <= int(p) <= 65535:
-                raise ValueError(f"{name}: '{p}' is not a valid port")
-            out.append(int(p))
+            lo, _, hi = p.partition("-")  # a single port, or a range like 42000-42009
+            if not lo.strip().isdigit() or (_ and not hi.strip().isdigit()):
+                raise ValueError(f"{name}: '{p}' is not a valid port or range")
+            lo, hi = int(lo), int(hi) if _ else int(lo)
+            if not (1 <= lo <= hi <= 65535):
+                raise ValueError(f"{name}: '{p}' is not a valid port or range")
+            out.extend(range(lo, hi + 1))
+        out = sorted(set(out))
         if not out:
             raise ValueError(f"{name}: list at least one port")
         return out
