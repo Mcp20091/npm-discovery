@@ -26,9 +26,11 @@ table{width:100%;border-collapse:collapse;background:var(--card);border:1px soli
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:12px;color:var(--mut);font-weight:600;white-space:nowrap}
 td.mut{color:var(--mut);font-size:12px}
-.act{display:flex;flex-direction:column;gap:6px;min-width:260px}
+.act{display:flex;flex-direction:column;gap:6px;width:300px;max-width:100%}
+td{word-break:break-word}
+main{overflow-x:auto}
 .act .line{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.act input[type=text]{flex:1;min-width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.act input[type=text]{flex:1;min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
 .act select{max-width:100%;padding:5px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line)}
 .act label{font-size:12px;color:var(--mut);white-space:nowrap}
 .gone{color:var(--bad);font-weight:600;font-size:12px}
@@ -135,7 +137,7 @@ function renderExcl() {
   const rows = excl.from_config.map(v => `<tr><td>${esc(v)}</td><td class="mut">from config.env</td><td></td></tr>`).concat(
     excl.items.map(x => `<tr><td>${esc(x.value)}</td><td class="mut">added here</td><td><button data-a="rmexcl" data-id="${x.id}">Remove</button></td></tr>`));
   $('#content').innerHTML = `<div class="banner info">These addresses are skipped by every scan. Use it for your router, PC or anything that objects to port scans. Takes effect on the next scan.</div>
-    <div class="act" style="flex-direction:row;margin-bottom:12px"><input type="text" id="exv" placeholder="192.168.1.5   192.168.1.50-60   192.168.1.128/28" style="max-width:380px">
+    <div class="act" style="flex-direction:row;margin-bottom:12px;width:auto"><input type="text" id="exv" placeholder="192.168.1.5   192.168.1.50-60   192.168.1.128/28" style="max-width:380px">
     <button class="primary" data-a="addexcl">Add</button></div><div class="err" style="margin-bottom:8px">${esc(exclErr)}</div>` +
     (rows.length ? `<table><thead><tr><th>Skipped address</th><th>Source</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">No exclusions.</div>');
 }
