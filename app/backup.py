@@ -29,6 +29,11 @@ async def history():
     return {"items": db.q("SELECT * FROM scans ORDER BY id DESC LIMIT ?", (db.HISTORY_KEEP,))}
 
 
+@router.get("/api/history/{scan_id}/log")
+async def history_log(scan_id: int):
+    return {"items": db.q("SELECT ts, level, msg FROM scan_log WHERE scan_id=? ORDER BY rowid", (scan_id,))}
+
+
 @router.get("/api/history/{scan_id}")
 async def history_detail(scan_id: int):
     return {"items": db.q("SELECT ip, port, scheme, title, server, hostname FROM scan_hits "
@@ -159,6 +164,7 @@ async def restore(request: Request):
             if "scans" in clean:
                 c.execute("DELETE FROM scans")
                 c.execute("DELETE FROM scan_hits")
+                c.execute("DELETE FROM scan_log")  # scan ids come from the file, so old logs would not match
                 c.executemany("INSERT INTO scans(%s) VALUES(%s)" % (
                     ",".join(SCAN_COLS), ",".join("?" * len(SCAN_COLS))), clean["scans"])
                 c.executemany("INSERT INTO scan_hits(%s) VALUES(%s)" % (

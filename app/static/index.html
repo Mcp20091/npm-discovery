@@ -39,13 +39,16 @@ main{overflow-x:auto}
 code{font-size:12px}
 button.small{padding:3px 10px;font-size:13px}
 /* roomier text, tighter table */
+.nm{font-size:13px;color:var(--mut)}
+.slog{font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;padding:6px 4px}
+.l-warn{color:var(--warn)}.l-error{color:var(--bad)}
 .sh{cursor:pointer;user-select:none}
 .sh:hover{color:var(--fg);text-decoration:underline}
 body{font-size:15px}
 a{color:var(--acc)}
 main{max-width:1800px}
-table{width:100%}
-th.det{width:99%}
+table{width:auto;max-width:100%}
+td.dtc{max-width:340px}
 thead th:nth-child(2){min-width:250px}
 thead th:nth-child(4){min-width:170px}
 thead th:nth-child(5){min-width:130px}
@@ -104,11 +107,12 @@ async function loadHistory() { try { hist = (await api('/api/history')).items; }
 function dur(s) { if (!s.finished) return '-'; const t = Math.round(s.finished - s.started); return t >= 60 ? `${Math.floor(t / 60)}m ${t % 60}s` : `${t}s`; }
 function renderHistory() {
   if (!hist.length) { $('#content').innerHTML = '<div class="empty">No scans yet.</div>'; return; }
-  $('#content').innerHTML = `<div class="banner info">The last 100 scans. Click Show to see which services a scan found.</div>
+  $('#content').innerHTML = `<div class="banner info">The last 100 scans. Services lists what a scan found; Log shows how the scan ran: the nmap command, warnings, and any ports that did not answer (possible firewall or security-software blocks).</div>
     <table><thead><tr><th>Started</th><th>Took</th><th>Status</th><th>Found</th><th>New</th><th>Gone</th><th></th></tr></thead><tbody>` +
     hist.map(s => `<tr><td>${fmt(s.started)}</td><td>${dur(s)}</td><td class="${esc(s.status)}">${esc(s.status)}${s.error ? `<br><span class="err">${esc(s.error)}</span>` : ''}</td>
       <td>${s.status === 'finished' ? s.found : '-'}</td><td>${s.status === 'finished' ? s.new_count : '-'}</td><td>${s.status === 'finished' ? s.gone_count : '-'}</td>
-      <td>${s.status === 'finished' ? `<button data-a="hshow" data-id="${s.id}">Show</button>` : ''}</td></tr><tr id="h${s.id}" hidden><td colspan="7" class="mut"></td></tr>`).join('') + '</tbody></table>';
+      <td>${s.status === 'finished' ? `<button data-a="hshow" data-id="${s.id}" class="small">Services</button> ` : ''}<button data-a="hlog" data-id="${s.id}" class="small">Log</button></td></tr>
+      <tr id="h${s.id}" hidden><td colspan="7" class="mut"></td></tr><tr id="l${s.id}" hidden><td colspan="7"></td></tr>`).join('') + '</tbody></table>';
 }
 let sett = null, sdirty = false, smsg = {text: '', bad: false};
 async function loadSettings() { try { sett = (await api('/api/settings')).settings; } catch (e) { smsg = {text: e.message, bad: true}; } }
@@ -256,7 +260,10 @@ function groupHead(key, list) {
   const ips = [...new Set(list.map(i => i.ip))];
   const hn = (list.find(i => i.host_name) || {}).host_name || '', dns = (list.find(i => i.hostname) || {}).hostname || '';
   const open = !collapsed.has(key);
-  const head = ips.length === 1 ? hostHtml(ips[0], hn, dns)
+  // grouped by IP: the IP is the name, the host name sits beside it smaller; grouped by name: the reverse
+  const head = groupMode === 'ip' && ips.length === 1
+    ? `<span class="hn">${esc(ips[0])}</span>${hn || dns ? ` <span class="nm">${esc(hn || dns)}</span>` : ''}${hn && dns ? ` <small class="mut">${esc(dns)}</small>` : ''}`
+    : ips.length === 1 ? hostHtml(ips[0], hn, dns)
     : `<span class="hn">${esc(hn || dns || ips[0])}</span> ${ips.map(ip => `<span class="ipc">${esc(ip)}</span>`).join(' ')}`;
   return `<tr class="ghead" data-gh="${esc(key)}"><td><input type="checkbox" class="selg" data-ips="${esc(ips.join(' '))}" ${ips.every(ip => sel.has(ip)) ? 'checked' : ''}></td>
     <td colspan="2"><button class="caret" data-a="gtoggle" data-ip="${esc(key)}" title="Collapse / expand">${open ? '&#9660;' : '&#9654;'}</button>${head}
@@ -335,9 +342,9 @@ function row(i, grouped, gkey) {
       ${hurl ? `<br><a class="small" href="${esc(hurl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(hurl)} in a new tab">${esc(i.hostname)}:${i.port} &#8599;</a>` : ''}`;
   const details = `<div class="dt">${i.title ? esc(i.title) : '<span class="mut">-</span>'}</div>${i.server ? `<small class="mut">${esc(i.server)}</small>` : ''}`;
   const seen = `<span title="First seen ${esc(fmt(i.first_seen))}">${esc(fshort(i.last_seen))}</span>`;
-  if (grouped) return `<tr class="svc" data-g="${esc(gkey)}" ${collapsed.has(gkey) ? 'hidden' : ''}><td></td><td>${links}</td><td>${details}</td><td></td><td class="mut">${seen}</td><td>${action}</td></tr>`;
+  if (grouped) return `<tr class="svc" data-g="${esc(gkey)}" ${collapsed.has(gkey) ? 'hidden' : ''}><td></td><td>${links}</td><td class="dtc">${details}</td><td></td><td class="mut">${seen}</td><td>${action}</td></tr>`;
   return `<tr><td><input type="checkbox" class="sel" data-ip="${esc(i.ip)}" ${sel.has(i.ip) ? 'checked' : ''}></td>
-    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)}</div>${links}</td><td>${details}</td>
+    <td><div>${i.host_name || i.hostname ? hostHtml(i.ip, i.host_name, i.hostname, false) + ' ' : ''}${renameBtn(i.ip, i.host_name)}</div>${links}</td><td class="dtc">${details}</td>
     <td>${macHtml(i)}</td><td class="mut">${seen}</td><td>${action}</td></tr>`;
 }
 
@@ -359,6 +366,19 @@ document.addEventListener('click', async e => {  const t = e.target.closest('.ta
     try {
       for (const ip of ips) await api('/api/hosts/name', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip, name: nm})});
       await loadData();
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  if (a === 'hlog') {
+    const row = $('#l' + id);
+    if (!row.hidden) { row.hidden = true; return; }
+    try {
+      const items = (await api(`/api/history/${id}/log`)).items;
+      const time = ts => new Date(ts * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+      row.firstElementChild.innerHTML = items.length
+        ? `<div class="slog">${items.map(l => `<div class="l-${esc(l.level)}"><span class="mut">${esc(time(l.ts))}</span> ${esc(l.level === 'info' ? '' : l.level.toUpperCase() + ':')} ${esc(l.msg)}</div>`).join('')}</div>`
+        : '<span class="mut">No log was recorded for this scan (it ran before logging existed).</span>';
+      row.hidden = false;
     } catch (err) { alert(err.message); }
     return;
   }

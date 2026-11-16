@@ -43,6 +43,8 @@ def init():
             scan_id INTEGER NOT NULL, ip TEXT NOT NULL, port INTEGER NOT NULL,
             scheme TEXT, title TEXT, server TEXT, hostname TEXT);
         CREATE INDEX IF NOT EXISTS scan_hits_scan ON scan_hits(scan_id);
+        CREATE TABLE IF NOT EXISTS scan_log(scan_id INTEGER NOT NULL, ts REAL, level TEXT, msg TEXT);
+        CREATE INDEX IF NOT EXISTS scan_log_scan ON scan_log(scan_id);
         """)
         cols = {r["name"] for r in _conn.execute("PRAGMA table_info(scans)")}
         for c in ("new_count", "gone_count"):  # added after v1: upgrade existing databases
@@ -89,6 +91,7 @@ def save_scan_results(results, scan_start, scan_id=None):
                           "(SELECT id FROM scans ORDER BY id DESC LIMIT ?)", (HISTORY_KEEP,))
             _conn.execute("DELETE FROM scans WHERE id NOT IN (SELECT id FROM scans ORDER BY id DESC LIMIT ?)",
                           (HISTORY_KEEP,))
+            _conn.execute("DELETE FROM scan_log WHERE scan_id NOT IN (SELECT id FROM scans)")
         for r in results:
             _conn.execute("""
                 INSERT INTO discoveries(ip,port,scheme,title,server,hostname,first_seen,last_seen,missing,mac)
