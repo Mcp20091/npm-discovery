@@ -181,8 +181,12 @@ async def certificates():
         certs = await npm.certificates()
     except NpmError as e:
         return JSONResponse({"error": str(e), "items": []}, status_code=502)
-    return {"items": [{"id": c["id"], "name": c.get("nice_name") or ", ".join(c.get("domain_names", [])),
-                       "domains": c.get("domain_names", [])} for c in certs]}
+    def label(c):  # short label for the dropdowns; the full domain list is kept in "domains" for tooltips
+        doms = c.get("domain_names", [])
+        if c.get("nice_name"):
+            return c["nice_name"]
+        return (doms[0] if doms else f"Certificate {c['id']}") + (f" (+{len(doms) - 1} more)" if len(doms) > 1 else "")
+    return {"items": [{"id": c["id"], "name": label(c), "domains": c.get("domain_names", [])} for c in certs]}
 
 
 def _row(rid):

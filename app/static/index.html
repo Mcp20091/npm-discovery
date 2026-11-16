@@ -42,16 +42,21 @@ button.small{padding:3px 10px;font-size:13px}
 body{font-size:15px}
 a{color:var(--acc)}
 main{max-width:1800px}
-table{width:auto;max-width:100%}
+table{width:100%}
+th.det{width:99%}
+thead th:nth-child(2){min-width:250px}
+thead th:nth-child(4){min-width:170px}
+thead th:nth-child(5){min-width:130px}
+code{white-space:nowrap}
 th{font-size:13px}
 th,td{padding:9px 12px}
-td{max-width:380px}
-td:last-child{max-width:none}
 button{font-size:14px;padding:6px 13px}
 .act{width:520px}
 .act .line{gap:8px;align-items:center}
 .act input[type=text]{min-width:130px}
+select{padding:5px 8px;border-radius:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);font:inherit;max-width:280px;text-overflow:ellipsis}
 .act select{max-width:210px}
+.act label{font-size:14px;color:var(--fg)}
 .badge{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--mut);margin-right:8px;vertical-align:1px}
 .dt{font-weight:600}
 .tb{display:flex;align-items:center;gap:6px}
@@ -130,7 +135,7 @@ function renderSettings() {
     const s = sett[k], v = esc(s.value);
     let input;
     if (t === 'bool') input = `<input type="checkbox" data-k="${k}" ${String(s.value).toLowerCase() === 'true' ? 'checked' : ''}>`;
-    else if (t === 'cert') input = `<select data-k="${k}"><option value="0">No default certificate</option>${+s.value && !certs.some(c => String(c.id) === String(s.value)) ? `<option value="${esc(s.value)}" selected>Certificate ${esc(s.value)} (not found in NPM)</option>` : ''}${certs.map(c => `<option value="${c.id}" ${String(c.id) === String(s.value) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
+    else if (t === 'cert') input = `<select data-k="${k}"><option value="0">No default certificate</option>${+s.value && !certs.some(c => String(c.id) === String(s.value)) ? `<option value="${esc(s.value)}" selected>Certificate ${esc(s.value)} (not found in NPM)</option>` : ''}${certs.map(c => certOpt(c, String(c.id) === String(s.value))).join('')}</select>`;
     else if (t === 'area') input = `<textarea data-k="${k}" rows="3">${v}</textarea>`;
     else input = `<input type="${t}" data-k="${k}" value="${v}" ${k === 'NPM_PASSWORD' ? `placeholder="${s.set ? '(saved - leave blank to keep)' : 'not set'}" autocomplete="new-password"` : ''}>`;
     return `<label class="sf"><span class="sl">${label}<small> · ${s.source === 'ui' ? 'saved here' : s.source === 'config' ? 'from config.env' : 'default'}</small></span>${input}<small class="mut">${hint}</small></label>`;
@@ -214,20 +219,18 @@ function render() {
   if (!items.length) { $('#content').innerHTML = `<div class="empty">Nothing here.</div>`; return; }
   const extra = tab === 'proxied' ? '<th>Proxy host</th>' : '<th>Action</th>';
   const allOn = items.every(i => sel.has(i.ip));
-  const defSel = tab !== 'new' ? '' : `<label style="display:flex;gap:6px;align-items:center;margin-left:auto"><small class="mut">Default certificate</small>
-    <select id="defcert"><option value="0">None</option>${certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>`;
   const so = (v, cur, label) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`;
   $('#content').innerHTML = `<div class="line" style="margin-bottom:12px;align-items:center;display:flex;flex-wrap:wrap;gap:10px"><button data-a="exclsel" ${sel.size ? '' : 'disabled'}>Exclude selected hosts (${sel.size})</button>
     <label class="tb">Group <select id="grpmode">${so('ip', groupMode, 'By IP')}${so('name', groupMode, 'By host name')}${so('none', groupMode, 'No grouping')}</select></label>
     <label class="tb">Sort <select id="sortby">${so('ip', sortBy, 'IP')}${so('name', sortBy, 'Host name')}</select>
       <button data-a="sortdir" class="small" title="Switch between ascending and descending">${sortDir === 'asc' ? '&#9650; Ascending' : '&#9660; Descending'}</button></label>
     ${groupMode !== 'none' ? '<button data-a="collapseall" class="small">Collapse all</button><button data-a="expandall" class="small">Expand all</button>' : ''}
-    ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}
-    ${defSel}</div>
-    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>Host / service</th><th>Details</th><th>MAC</th><th>Last seen</th>${extra}</tr></thead><tbody>` +
+    ${items.some(i => i.mac && !i.vendor) ? '<button data-a="vendorall" title="Uses nmap\'s offline vendor list; nothing is sent to the internet">Look up all MAC vendors</button>' : ''}</div>
+    <table><thead><tr><th><input type="checkbox" id="selall" title="Select all" ${allOn ? 'checked' : ''}></th><th>Host / service</th><th class="det">Details</th><th>MAC</th><th>Last seen</th>${extra}</tr></thead><tbody>` +
     tableBody(items) + '</tbody></table>';
 }
 const sel = new Set();
+const certOpt = (c, on) => `<option value="${c.id}" title="${esc((c.domains || []).join(', '))}" ${on ? 'selected' : ''}>${esc(c.name)}</option>`;
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 let groupMode = (() => { const m = lsGet('npmd.groupmode'); return ['ip', 'name', 'none'].includes(m) ? m : (lsGet('npmd.group') === '0' ? 'none' : 'ip'); })();
@@ -282,15 +285,6 @@ document.addEventListener('change', e => {
   else if (e.target.id === 'sortby') { sortBy = e.target.value; lsSet('npmd.sort', sortBy); render(); }
 });
 const defCertId = () => (sett && sett.DEFAULT_CERT_ID) ? +sett.DEFAULT_CERT_ID.value || 0 : 0;
-document.addEventListener('change', async e => {
-  if (e.target.id !== 'defcert') return;
-  const v = e.target.value;
-  try {
-    await api('/api/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({values: {DEFAULT_CERT_ID: v}})});
-    await loadSettings();
-    document.querySelectorAll('.act .cert').forEach(s => s.value = v);  // no re-render: keeps subdomains you are typing
-  } catch (err) { alert(err.message); }
-});
 function selUi() { const b = document.querySelector('button[data-a=exclsel]'); if (b) { b.disabled = !sel.size; b.textContent = `Exclude selected hosts (${sel.size})`; } }
 document.addEventListener('change', e => {  // selection is per IP: exclusions apply to a whole host
   const t = e.target, cl = t.classList;
@@ -311,7 +305,7 @@ function row(i, grouped, gkey) {
   if (tab === 'proxied') action = esc(i.proxy_domains.join(' | '));
   else if (tab === 'dismissed') action = `<button data-a="restore" data-id="${i.id}">Restore</button>`;
   else {
-    const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => `<option value="${c.id}" ${c.id === defCertId() ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    const opts = '<option value="0">No SSL certificate</option>' + certs.map(c => certOpt(c, c.id === defCertId())).join('');
     action = `<div class="act" id="r${i.id}">
       <div class="line"><input type="text" class="sub" value="${esc(i.suggestion)}"><span>.${esc(status.base_domain)}</span><select class="cert">${opts}</select></div>
       <div class="line"><label><input type="checkbox" class="be" checked> Block exploits</label>
